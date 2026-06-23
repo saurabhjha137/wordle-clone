@@ -10,6 +10,7 @@ from utils.validate import validate_register, validate_login
 from utils.db       import (find_user_by_username, find_user_by_email,
                              create_user, update_user_stats, get_leaderboard)
 from utils.auth     import sign_token, verify_token, extract_bearer_token
+from utils.words    import get_random_word, cipher_word
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 log = logging.getLogger(__name__)
@@ -158,6 +159,28 @@ def save_result(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         log.error('save_result error: %s', e)
         return _json({'error': 'Could not save result.'}, 500)
+
+
+# ── GET /api/word ──────────────────────────────────────────────────────────
+
+@app.route(route='word', methods=['GET', 'OPTIONS'])
+def get_word(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == 'OPTIONS':
+        return _cors_preflight('GET,OPTIONS')
+
+    try:
+        length = int(req.params.get('length', 5))
+    except (ValueError, TypeError):
+        return _json({'error': 'length must be an integer'}, 400)
+
+    if length not in (3, 4, 5, 6, 7):
+        return _json({'error': 'length must be 3, 4, 5, 6, or 7'}, 400)
+
+    word = get_random_word(length)
+    if not word:
+        return _json({'error': 'No words available for that length'}, 500)
+
+    return _json({'word': cipher_word(word), 'length': length})
 
 
 # ── GET /api/leaderboard ───────────────────────────────────────────────────

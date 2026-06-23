@@ -122,6 +122,18 @@
         <button class="key wide" data-key="Backspace">⌫</button>
       </div>
     </div>
+
+    <!-- Game-over panel — shown on the board after every end (win / lose / timeout) -->
+    <div id="game-over-panel" class="game-over-panel hidden">
+      <div id="game-over-word-wrap" class="game-over-word-wrap hidden">
+        <span class="game-over-label">The word was</span>
+        <span id="game-over-word" class="game-over-word"></span>
+      </div>
+      <div class="game-over-actions">
+        <button class="end-btn end-btn--secondary" id="change-mode-btn">Change Mode</button>
+        <button class="end-btn end-btn--primary"   id="play-again-btn">Play Again</button>
+      </div>
+    </div>
   </main>
 
   <!-- ── Leaderboard Modal ── -->
@@ -138,7 +150,7 @@
         <table class="lb-table hidden" id="lb-table">
           <thead>
             <tr>
-              <th>#</th><th>Player</th><th>Wins</th><th>Win %</th><th>Streak</th><th>Best</th>
+              <th>#</th><th>Player</th><th>Played</th><th>Wins</th><th>Win %</th><th>Streak</th><th>Best</th>
             </tr>
           </thead>
           <tbody id="lb-body"></tbody>
@@ -215,7 +227,6 @@
         </div>
         <p class="dist-title">GUESS DISTRIBUTION</p>
         <div id="distribution"></div>
-        <button class="new-game-btn hidden" id="new-game-btn">New Game</button>
       </div>
     </div>
   </div>

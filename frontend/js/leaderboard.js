@@ -48,6 +48,7 @@ export async function loadLeaderboard() {
       tr.innerHTML = `
         <td><span class="lb-rank ${rankClass}">${medal}</span></td>
         <td class="lb-player">${p.username}</td>
+        <td>${p.played}</td>
         <td class="lb-wins">${p.won}</td>
         <td>${p.winPct}%</td>
         <td>${p.streak}</td>

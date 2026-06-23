@@ -1,16 +1,27 @@
 import { ATTEMPTS_BY_LENGTH, TIMER_SECONDS_BY_LENGTH, WORD_LENGTHS, DEFAULT_LENGTH }
        from './constants.js';
+import { CONFIG }                                  from './config.js';
 import { getGameIndex, markGameDone, advanceGame,
          saveChosenLength, getChosenLength }      from './storage.js';
 import { getWordByIndex, VALID_GUESSES_BY_LENGTH } from './words.js';
-import { buildBoard, getTile, updateActiveTile,
-         resetBoard }                              from './board.js';
+import { buildBoard, getTile, updateActiveTile }    from './board.js';
 import { Timer, updateTimerUI, hideTimerUI }       from './timer.js';
-import { evaluateGuess, revealRow, updateKeyColor,
+import { evaluateGuess, revealRow,
          resetKeyboard, shakeRow, bounceRow }      from './game.js';
 import { recordResult, renderStats }               from './stats.js';
 import { saveResultToServer, loadLeaderboard }     from './leaderboard.js';
 import { initAuth, showAuth, showGame, getSession } from './auth.js';
+
+// ── Word cipher (XOR + base64) ─────────────────────────────────────────────
+const _CIPHER_KEY = [87, 82, 68, 76]; // 'WRDL'
+function decipherWord(token) {
+  try {
+    const raw = atob(token);
+    return Array.from(raw, (c, i) =>
+      String.fromCharCode(c.charCodeAt(0) ^ _CIPHER_KEY[i % _CIPHER_KEY.length])
+    ).join('');
+  } catch (_) { return ''; }
+}
 
 // ── Game state ─────────────────────────────────────────────────────────────
 let wordLen      = DEFAULT_LENGTH;
@@ -41,7 +52,6 @@ function setupModals() {
 
   document.getElementById('stats-btn').addEventListener('click', () => {
     renderStats(wordLen);
-    document.getElementById('new-game-btn').classList.toggle('hidden', !gameOver);
     openModal('stats-modal');
   });
   document.getElementById('stats-close').addEventListener('click', () => closeModal('stats-modal'));
@@ -67,6 +77,34 @@ function setupModals() {
   });
 }
 
+// ── Game-over panel (on the board, not in a modal) ────────────────────────
+function showEndGamePanel(showWord) {
+  const panel    = document.getElementById('game-over-panel');
+  const wordWrap = document.getElementById('game-over-word-wrap');
+  const wordEl   = document.getElementById('game-over-word');
+
+  // Hide keyboard & hint — they're useless after game ends and take up space
+  document.getElementById('keyboard').classList.add('kb-hidden');
+  document.querySelector('.game-hint').classList.add('hint-hidden');
+
+  // Reset animation so it replays on every game end (not just the first)
+  panel.style.animation = 'none';
+  panel.classList.remove('hidden');
+  panel.offsetHeight; // force reflow — required for animation restart
+  panel.style.animation = '';
+
+  if (showWord && target) {
+    wordEl.textContent = target;
+    wordWrap.classList.remove('hidden');
+  } else {
+    wordWrap.classList.add('hidden');
+  }
+}
+
+function hideEndGamePanel() {
+  document.getElementById('game-over-panel').classList.add('hidden');
+}
+
 // ── Length picker ──────────────────────────────────────────────────────────
 let pickerSelection = DEFAULT_LENGTH;
 
@@ -90,10 +128,13 @@ function renderPickerOptions() {
     const btn = document.createElement('button');
     btn.className = `picker-opt${len === pickerSelection ? ' active' : ''}`;
     btn.dataset.len = len;
+    const secs = TIMER_SECONDS_BY_LENGTH[len];
+    const m = Math.floor(secs / 60), s = secs % 60;
+    const timeStr = s === 0 ? `${m}:00` : `${m}:${String(s).padStart(2, '0')}`;
     btn.innerHTML = `
       <span class="picker-len">${len}</span>
       <span class="picker-detail">${ATTEMPTS_BY_LENGTH[len]} attempts</span>
-      <span class="picker-detail">${TIMER_SECONDS_BY_LENGTH[len] / 60}:00 min</span>`;
+      <span class="picker-detail">${timeStr} min</span>`;
     btn.addEventListener('click', () => {
       pickerSelection = len;
       container.querySelectorAll('.picker-opt').forEach(b => b.classList.remove('active'));
@@ -104,27 +145,47 @@ function renderPickerOptions() {
 }
 
 // ── Game flow ──────────────────────────────────────────────────────────────
-function startGame(len) {
+async function startGame(len) {
   wordLen      = len;
   maxRows      = ATTEMPTS_BY_LENGTH[len];
   currentRow   = 0;
   currentCol   = 0;
   currentGuess = [];
   gameOver     = false;
+  target       = '';
 
   saveChosenLength(len);
-  target = getWordByIndex(getGameIndex(len), len);
+
+  // Restore keyboard & hint (hidden during game-over)
+  document.getElementById('keyboard').classList.remove('kb-hidden');
+  document.querySelector('.game-hint').classList.remove('hint-hidden');
 
   buildBoard(wordLen, maxRows);
   resetKeyboard();
+  hideEndGamePanel();
   hideLengthPicker();
-  updateActiveTile(currentRow, currentCol, wordLen, gameOver);
-
-  // Hint bar update
   document.getElementById('hint-word-len').textContent = len;
 
-  // Start timer
+  // Stop any running timer while fetching the word
   if (activeTimer) activeTimer.stop();
+  hideTimerUI();
+
+  // Fetch word from backend; fall back to client-side on any error
+  try {
+    const res = await fetch(`${CONFIG.API_URL}/word?length=${len}`);
+    if (res.ok) {
+      const data = await res.json();
+      target = decipherWord(data.word || '');
+    }
+  } catch (_) {}
+
+  if (!target) {
+    target = getWordByIndex(getGameIndex(len), len);
+  }
+
+  updateActiveTile(currentRow, currentCol, wordLen, gameOver);
+
+  // Start timer
   const seconds = TIMER_SECONDS_BY_LENGTH[len];
   activeTimer = new Timer(
     seconds,
@@ -138,15 +199,14 @@ function onTimeUp() {
   if (gameOver) return;
   gameOver = true;
   markGameDone(wordLen);
-  showToast(`Time's up! The word was ${target}`, 3500);
+  showToast(`⏰ Time's up!`, 2000);
   recordResult(false, null, wordLen);
   saveResultToServer(false, null, wordLen);
   updateActiveTile(currentRow, currentCol, wordLen, true);
   setTimeout(() => {
     renderStats(wordLen);
-    document.getElementById('new-game-btn').classList.remove('hidden');
-    openModal('stats-modal');
-  }, 2000);
+    showEndGamePanel(true);
+  }, 1800);
 }
 
 function endGame() {
@@ -177,6 +237,7 @@ function deleteLetter() {
 }
 
 function submitGuess() {
+  if (!target) { showToast('Loading word…'); return; }
   if (currentCol < wordLen) {
     showToast('Not enough letters');
     shakeRow(currentRow);
@@ -212,11 +273,10 @@ function submitGuess() {
       updateActiveTile(currentRow, currentCol, wordLen, true);
       setTimeout(() => {
         renderStats(wordLen, currentRow);
-        document.getElementById('new-game-btn').classList.remove('hidden');
-        openModal('stats-modal');
+        showEndGamePanel(false);
       }, 2200);
     } else if (currentRow >= maxRows) {
-      showToast(target, 3500);
+      showToast(`The word was ${target}`, 3000);
       recordResult(false, null, wordLen);
       saveResultToServer(false, null, wordLen);
       gameOver = true;
@@ -225,8 +285,7 @@ function submitGuess() {
       updateActiveTile(currentRow, currentCol, wordLen, true);
       setTimeout(() => {
         renderStats(wordLen);
-        document.getElementById('new-game-btn').classList.remove('hidden');
-        openModal('stats-modal');
+        showEndGamePanel(true);
       }, 2500);
     } else {
       updateActiveTile(currentRow, currentCol, wordLen, false);
@@ -272,8 +331,15 @@ function boot() {
   setupModals();
   setupInput();
 
-  // New Game button
-  document.getElementById('new-game-btn').addEventListener('click', () => {
+  // End-game: Play Again (same length, next word)
+  document.getElementById('play-again-btn').addEventListener('click', () => {
+    closeModal('stats-modal');
+    advanceGame(wordLen);
+    startGame(wordLen);
+  });
+
+  // End-game: Change Mode (back to length picker)
+  document.getElementById('change-mode-btn').addEventListener('click', () => {
     closeModal('stats-modal');
     advanceGame(wordLen);
     showLengthPicker();
