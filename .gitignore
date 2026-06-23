@@ -1,0 +1,32 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Azure / AWS credentials — never commit these
+.env
+.env.*
+*.pem
+*.key
+azure-credentials.json
+aws-credentials.json
+
+# Python (for future Azure Functions)
+__pycache__/
+*.pyc
+*.pyo
+.python-version
+venv/
+.venv/
+
+# Node (for future tooling)
+node_modules/
+npm-debug.log*
+
+# Azure Functions local settings (contains secrets)
+local.settings.json

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wordle Clone</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="header-side">
+      <button class="icon-btn" id="help-btn" aria-label="How to play">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/>
+          <circle cx="12" cy="17" r=".5" fill="currentColor" stroke="none"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="header-center">
+      <h1>WORDLE</h1>
+      <span class="date-label" id="date-label"></span>
+    </div>
+
+    <div class="header-side right">
+      <button class="icon-btn" id="stats-btn" aria-label="Statistics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <rect x="18" y="10" width="3" height="10" rx="1.5"/>
+          <rect x="10.5" y="4" width="3" height="16" rx="1.5"/>
+          <rect x="3" y="14" width="3" height="6" rx="1.5"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Toast ── -->
+  <div id="toast" class="toast hidden"></div>
+
+  <main>
+    <!-- Game board -->
+    <div id="board">
+      <div class="row" id="row-0">
+        <div class="tile" id="r0c0"></div><div class="tile" id="r0c1"></div>
+        <div class="tile" id="r0c2"></div><div class="tile" id="r0c3"></div>
+        <div class="tile" id="r0c4"></div>
+      </div>
+      <div class="row" id="row-1">
+        <div class="tile" id="r1c0"></div><div class="tile" id="r1c1"></div>
+        <div class="tile" id="r1c2"></div><div class="tile" id="r1c3"></div>
+        <div class="tile" id="r1c4"></div>
+      </div>
+      <div class="row" id="row-2">
+        <div class="tile" id="r2c0"></div><div class="tile" id="r2c1"></div>
+        <div class="tile" id="r2c2"></div><div class="tile" id="r2c3"></div>
+        <div class="tile" id="r2c4"></div>
+      </div>
+      <div class="row" id="row-3">
+        <div class="tile" id="r3c0"></div><div class="tile" id="r3c1"></div>
+        <div class="tile" id="r3c2"></div><div class="tile" id="r3c3"></div>
+        <div class="tile" id="r3c4"></div>
+      </div>
+      <div class="row" id="row-4">
+        <div class="tile" id="r4c0"></div><div class="tile" id="r4c1"></div>
+        <div class="tile" id="r4c2"></div><div class="tile" id="r4c3"></div>
+        <div class="tile" id="r4c4"></div>
+      </div>
+      <div class="row" id="row-5">
+        <div class="tile" id="r5c0"></div><div class="tile" id="r5c1"></div>
+        <div class="tile" id="r5c2"></div><div class="tile" id="r5c3"></div>
+        <div class="tile" id="r5c4"></div>
+      </div>
+    </div>
+
+    <!-- On-screen keyboard -->
+    <div id="keyboard">
+      <div class="kb-row">
+        <button class="key" data-key="q">Q</button><button class="key" data-key="w">W</button>
+        <button class="key" data-key="e">E</button><button class="key" data-key="r">R</button>
+        <button class="key" data-key="t">T</button><button class="key" data-key="y">Y</button>
+        <button class="key" data-key="u">U</button><button class="key" data-key="i">I</button>
+        <button class="key" data-key="o">O</button><button class="key" data-key="p">P</button>
+      </div>
+      <div class="kb-row">
+        <button class="key" data-key="a">A</button><button class="key" data-key="s">S</button>
+        <button class="key" data-key="d">D</button><button class="key" data-key="f">F</button>
+        <button class="key" data-key="g">G</button><button class="key" data-key="h">H</button>
+        <button class="key" data-key="j">J</button><button class="key" data-key="k">K</button>
+        <button class="key" data-key="l">L</button>
+      </div>
+      <div class="kb-row">
+        <button class="key wide" data-key="Enter">ENTER</button>
+        <button class="key" data-key="z">Z</button><button class="key" data-key="x">X</button>
+        <button class="key" data-key="c">C</button><button class="key" data-key="v">V</button>
+        <button class="key" data-key="b">B</button><button class="key" data-key="n">N</button>
+        <button class="key" data-key="m">M</button>
+        <button class="key wide" data-key="Backspace">⌫</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── Help Modal ── -->
+  <div id="help-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>HOW TO PLAY</h2>
+        <button class="modal-close" id="help-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>Guess the <strong>WORDLE</strong> in 6 tries.</p>
+        <ul>
+          <li>Each guess must be a valid 5-letter word.</li>
+          <li>Tile colors reveal how close your guess was.</li>
+        </ul>
+
+        <div class="example-section">
+          <p class="example-label">Examples</p>
+
+          <div class="example-group">
+            <div class="example-row">
+              <div class="tile correct">W</div>
+              <div class="tile ex-empty">E</div>
+              <div class="tile ex-empty">A</div>
+              <div class="tile ex-empty">R</div>
+              <div class="tile ex-empty">Y</div>
+            </div>
+            <p><strong>W</strong> is in the correct spot.</p>
+          </div>
+
+          <div class="example-group">
+            <div class="example-row">
+              <div class="tile ex-empty">P</div>
+              <div class="tile present">I</div>
+              <div class="tile ex-empty">L</div>
+              <div class="tile ex-empty">L</div>
+              <div class="tile ex-empty">S</div>
+            </div>
+            <p><strong>I</strong> is in the word but wrong spot.</p>
+          </div>
+
+          <div class="example-group">
+            <div class="example-row">
+              <div class="tile ex-empty">V</div>
+              <div class="tile ex-empty">A</div>
+              <div class="tile ex-empty">G</div>
+              <div class="tile absent">U</div>
+              <div class="tile ex-empty">E</div>
+            </div>
+            <p><strong>U</strong> is not in the word.</p>
+          </div>
+        </div>
+
+        <p class="help-footer">A new word is available each day!</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Stats Modal ── -->
+  <div id="stats-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>STATISTICS</h2>
+        <button class="modal-close" id="stats-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-number" id="stat-played">0</div>
+            <div class="stat-label">Played</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number" id="stat-win-pct">0</div>
+            <div class="stat-label">Win %</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number" id="stat-streak">0</div>
+            <div class="stat-label">Streak</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number" id="stat-max-streak">0</div>
+            <div class="stat-label">Best</div>
+          </div>
+        </div>
+
+        <p class="dist-title">GUESS DISTRIBUTION</p>
+        <div id="distribution"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="words.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
