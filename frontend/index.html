@@ -35,7 +35,10 @@
 
     <div class="header-center">
       <h1>WORDLE</h1>
-      <span class="date-label" id="date-label"></span>
+      <div class="header-meta">
+        <span class="date-label" id="date-label"></span>
+        <span id="timer-display" class="timer-display hidden">2:00</span>
+      </div>
     </div>
 
     <div class="header-side right">
@@ -59,47 +62,35 @@
     </div>
   </header>
 
+  <!-- ── Timer bar ── -->
+  <div id="timer-bar-wrap" class="timer-bar-wrap hidden">
+    <div id="timer-bar" class="timer-bar safe"></div>
+  </div>
+
   <!-- ── Toast ── -->
   <div id="toast" class="toast hidden"></div>
 
-  <main>
-    <!-- Game board -->
-    <div id="board">
-      <div class="row" id="row-0" data-attempt="1">
-        <div class="tile" id="r0c0"></div><div class="tile" id="r0c1"></div>
-        <div class="tile" id="r0c2"></div><div class="tile" id="r0c3"></div>
-        <div class="tile" id="r0c4"></div>
+  <!-- ── Length Picker ── -->
+  <div id="length-picker" class="picker-overlay hidden">
+    <div class="picker-card">
+      <div class="picker-brand">
+        <div class="auth-brand-icon">W</div>
+        <h2 class="picker-title">WORDLE</h2>
       </div>
-      <div class="row" id="row-1" data-attempt="2">
-        <div class="tile" id="r1c0"></div><div class="tile" id="r1c1"></div>
-        <div class="tile" id="r1c2"></div><div class="tile" id="r1c3"></div>
-        <div class="tile" id="r1c4"></div>
-      </div>
-      <div class="row" id="row-2" data-attempt="3">
-        <div class="tile" id="r2c0"></div><div class="tile" id="r2c1"></div>
-        <div class="tile" id="r2c2"></div><div class="tile" id="r2c3"></div>
-        <div class="tile" id="r2c4"></div>
-      </div>
-      <div class="row" id="row-3" data-attempt="4">
-        <div class="tile" id="r3c0"></div><div class="tile" id="r3c1"></div>
-        <div class="tile" id="r3c2"></div><div class="tile" id="r3c3"></div>
-        <div class="tile" id="r3c4"></div>
-      </div>
-      <div class="row" id="row-4" data-attempt="5">
-        <div class="tile" id="r4c0"></div><div class="tile" id="r4c1"></div>
-        <div class="tile" id="r4c2"></div><div class="tile" id="r4c3"></div>
-        <div class="tile" id="r4c4"></div>
-      </div>
-      <div class="row" id="row-5" data-attempt="6">
-        <div class="tile" id="r5c0"></div><div class="tile" id="r5c1"></div>
-        <div class="tile" id="r5c2"></div><div class="tile" id="r5c3"></div>
-        <div class="tile" id="r5c4"></div>
-      </div>
+      <p class="picker-subtitle">Choose your challenge</p>
+      <div class="picker-options" id="picker-options"></div>
+      <button class="start-btn" id="start-game-btn">Start Game</button>
     </div>
+  </div>
+
+  <!-- ── Main Game ── -->
+  <main id="main-game" class="hidden">
+    <!-- Board (tiles injected by JS) -->
+    <div id="board"></div>
 
     <!-- Hint bar -->
     <div class="game-hint">
-      <span>Type a 5-letter word left to right</span>
+      <span>Type a <strong id="hint-word-len">5</strong>-letter word left to right</span>
       <span class="hint-divider">·</span>
       <span><kbd>ENTER</kbd> to submit</span>
       <span class="hint-divider">·</span>
@@ -147,12 +138,7 @@
         <table class="lb-table hidden" id="lb-table">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Player</th>
-              <th>Wins</th>
-              <th>Win %</th>
-              <th>Streak</th>
-              <th>Best</th>
+              <th>#</th><th>Player</th><th>Wins</th><th>Win %</th><th>Streak</th><th>Best</th>
             </tr>
           </thead>
           <tbody id="lb-body"></tbody>
@@ -169,15 +155,14 @@
         <button class="modal-close" id="help-close">✕</button>
       </div>
       <div class="modal-body">
-        <p>Guess the <strong>WORDLE</strong> in 6 tries.</p>
+        <p>Guess the <strong>WORDLE</strong> in the given attempts.</p>
         <ul>
-          <li>Each guess must be a valid 5-letter word.</li>
+          <li>Each guess must be a valid word of the chosen length.</li>
           <li>Tile colors reveal how close your guess was.</li>
+          <li>Beat the timer before it runs out!</li>
         </ul>
-
         <div class="example-section">
           <p class="example-label">Examples</p>
-
           <div class="example-group">
             <div class="example-row">
               <div class="tile correct">W</div>
@@ -188,7 +173,6 @@
             </div>
             <p><strong>W</strong> is in the correct spot.</p>
           </div>
-
           <div class="example-group">
             <div class="example-row">
               <div class="tile ex-empty">P</div>
@@ -199,7 +183,6 @@
             </div>
             <p><strong>I</strong> is in the word but wrong spot.</p>
           </div>
-
           <div class="example-group">
             <div class="example-row">
               <div class="tile ex-empty">V</div>
@@ -211,8 +194,7 @@
             <p><strong>U</strong> is not in the word.</p>
           </div>
         </div>
-
-        <p class="help-footer">A new word is available each day!</p>
+        <p class="help-footer">A new word every game!</p>
       </div>
     </div>
   </div>
@@ -226,24 +208,11 @@
       </div>
       <div class="modal-body">
         <div class="stats-grid">
-          <div class="stat-item">
-            <div class="stat-number" id="stat-played">0</div>
-            <div class="stat-label">Played</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-number" id="stat-win-pct">0</div>
-            <div class="stat-label">Win %</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-number" id="stat-streak">0</div>
-            <div class="stat-label">Streak</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-number" id="stat-max-streak">0</div>
-            <div class="stat-label">Best</div>
-          </div>
+          <div class="stat-item"><div class="stat-number" id="stat-played">0</div><div class="stat-label">Played</div></div>
+          <div class="stat-item"><div class="stat-number" id="stat-win-pct">0</div><div class="stat-label">Win %</div></div>
+          <div class="stat-item"><div class="stat-number" id="stat-streak">0</div><div class="stat-label">Streak</div></div>
+          <div class="stat-item"><div class="stat-number" id="stat-max-streak">0</div><div class="stat-label">Best</div></div>
         </div>
-
         <p class="dist-title">GUESS DISTRIBUTION</p>
         <div id="distribution"></div>
         <button class="new-game-btn hidden" id="new-game-btn">New Game</button>
@@ -258,12 +227,12 @@
         <div class="auth-brand-icon">W</div>
         <h1 class="auth-logo">WORDLE</h1>
       </div>
-      <p class="auth-subtitle">Guess the hidden 5-letter word in 6 tries</p>
+      <p class="auth-subtitle">Guess the hidden word in the given attempts</p>
 
       <div class="auth-tabs">
         <div class="tab-slider" id="tab-slider"></div>
         <button class="auth-tab active" id="tab-login" type="button">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h11M10 6l4 4-4 4"/><circle cx="14" cy="10" r="0"/><path d="M7 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h11M10 6l4 4-4 4"/><path d="M7 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
           Sign In
         </button>
         <button class="auth-tab" id="tab-register" type="button">
@@ -272,7 +241,6 @@
         </button>
       </div>
 
-      <!-- ── Login Form ── -->
       <form id="login-form" novalidate>
         <div class="field">
           <label for="login-username">Username</label>
@@ -280,7 +248,6 @@
                  autocomplete="username" autocapitalize="none" spellcheck="false" />
           <span class="field-error" id="err-login-username"></span>
         </div>
-
         <div class="field">
           <label for="login-password">Password</label>
           <div class="pw-wrap">
@@ -292,12 +259,10 @@
           </div>
           <span class="field-error" id="err-login-password"></span>
         </div>
-
         <span class="field-error form-error" id="err-login-form"></span>
         <button type="submit" class="auth-submit" id="login-submit">Sign In</button>
       </form>
 
-      <!-- ── Register Form ── -->
       <form id="register-form" class="hidden" novalidate>
         <div class="field">
           <label for="reg-username">Username</label>
@@ -306,14 +271,12 @@
                  minlength="3" maxlength="20" />
           <span class="field-error" id="err-reg-username"></span>
         </div>
-
         <div class="field">
           <label for="reg-email">Email</label>
           <input id="reg-email" type="email" placeholder="you@example.com"
                  autocomplete="email" />
           <span class="field-error" id="err-reg-email"></span>
         </div>
-
         <div class="field">
           <label for="reg-password">Password</label>
           <div class="pw-wrap">
@@ -328,23 +291,17 @@
             <div class="pw-bar" id="pw-bar"></div>
           </div>
         </div>
-
         <div class="field">
           <label for="reg-age">Age</label>
-          <input id="reg-age" type="number" placeholder="Must be 13 or older"
-                 min="13" max="120" />
+          <input id="reg-age" type="number" placeholder="Must be 13 or older" min="13" max="120" />
           <span class="field-error" id="err-reg-age"></span>
         </div>
-
         <span class="field-error form-error" id="err-reg-form"></span>
         <button type="submit" class="auth-submit" id="register-submit">Create Account</button>
       </form>
     </div>
   </div>
 
-  <script src="words.js"></script>
-  <script src="config.js"></script>
-  <script src="auth.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

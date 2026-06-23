@@ -58,6 +58,12 @@ header {
   gap: 2px;
 }
 
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 h1 {
   font-size: 1.75rem;
   font-weight: 800;
@@ -155,14 +161,14 @@ main {
 }
 
 .tile {
-  width: 62px;
-  height: 62px;
+  width:  var(--tile-size, 62px);
+  height: var(--tile-size, 62px);
   border: 2px solid var(--border);
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.9rem;
+  font-size: var(--tile-font, 1.9rem);
   font-weight: 800;
   text-transform: uppercase;
   color: var(--text);
@@ -936,6 +942,173 @@ main {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Timer ── */
+.timer-bar-wrap {
+  width: 100%;
+  max-width: 520px;
+  height: 3px;
+  background: var(--surface-2);
+  margin-top: -20px;
+  margin-bottom: 16px;
+}
+
+.timer-bar-wrap.hidden { display: none; }
+
+.timer-bar {
+  height: 100%;
+  transition: width 0.9s linear, background 0.5s ease;
+  border-radius: 2px;
+}
+
+.timer-bar.safe   { background: var(--correct); }
+.timer-bar.warn   { background: var(--present); }
+.timer-bar.danger { background: #e05c5c; }
+
+.timer-display {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-display.hidden  { display: none; }
+.timer-display.danger  { color: #e05c5c; animation: timer-pulse 0.6s ease-in-out infinite; }
+
+@keyframes timer-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── Length Picker ── */
+.picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(107,108,247,.1) 0%, transparent 60%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+  padding: 24px 16px;
+}
+
+.picker-overlay.hidden { display: none; }
+
+.picker-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 400px;
+  padding: 28px 24px 32px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.picker-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.picker-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.25rem;
+  background: linear-gradient(135deg, #fff 30%, #9090a8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+}
+
+.picker-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.picker-options {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.picker-opt {
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 12px 14px;
+  min-width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.1s;
+  font-family: 'Inter', sans-serif;
+}
+
+.picker-opt:hover {
+  border-color: var(--border-active);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.picker-opt.active {
+  border-color: var(--accent);
+  background: rgba(107,108,247,.12);
+  color: var(--text);
+  box-shadow: 0 0 0 4px rgba(107,108,247,.15);
+}
+
+.picker-len {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.picker-detail {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.03rem;
+  white-space: nowrap;
+}
+
+.picker-opt.active .picker-detail { color: #9090ff; }
+
+.start-btn {
+  width: 100%;
+  padding: 13px;
+  background: var(--accent);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.05rem;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  margin-top: 4px;
+}
+
+.start-btn:hover  { background: #7c7df9; }
+.start-btn:active { transform: scale(0.98); }
+
+/* ── Hidden game wrapper ── */
+#main-game.hidden { display: none; }
 
 /* ── Mobile ── */
 @media (max-width: 420px) {
