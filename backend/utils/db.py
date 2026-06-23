@@ -1,4 +1,5 @@
 import os
+from datetime import date, timedelta
 from azure.cosmos import CosmosClient
 
 _DB        = 'wordledb'
@@ -33,3 +34,36 @@ def find_user_by_email(email: str):
 
 def create_user(user: dict):
     return _get_container().create_item(body=user)
+
+
+def update_user_stats(username: str, won: bool, guess_count: int | None):
+    user = find_user_by_username(username)
+    if not user:
+        return
+
+    today     = date.today().isoformat()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+    s = user.get('stats', {'played': 0, 'won': 0, 'streak': 0, 'maxStreak': 0, 'lastWon': ''})
+
+    s['played'] = s.get('played', 0) + 1
+    if won:
+        s['won']      = s.get('won', 0) + 1
+        last_won      = s.get('lastWon', '')
+        s['streak']   = s.get('streak', 0) + 1 if last_won == yesterday else 1
+        s['maxStreak'] = max(s.get('maxStreak', 0), s['streak'])
+        s['lastWon']  = today
+    else:
+        s['streak'] = 0
+
+    user['stats'] = s
+    _get_container().upsert_item(user)
+
+
+def get_leaderboard(limit: int = 10) -> list:
+    items = list(_get_container().query_items(
+        query='SELECT c.username, c.displayName, c.stats FROM c WHERE IS_DEFINED(c.stats)',
+        enable_cross_partition_query=True
+    ))
+    items.sort(key=lambda x: x.get('stats', {}).get('won', 0), reverse=True)
+    return items[:limit]

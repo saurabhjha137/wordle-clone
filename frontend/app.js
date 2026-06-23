@@ -117,6 +117,11 @@ document.getElementById('stats-btn').addEventListener('click',  () => {
   openModal('stats-modal');
 });
 document.getElementById('stats-close').addEventListener('click', () => closeModal('stats-modal'));
+document.getElementById('leaderboard-btn').addEventListener('click', () => {
+  openModal('leaderboard-modal');
+  loadLeaderboard();
+});
+document.getElementById('lb-close').addEventListener('click', () => closeModal('leaderboard-modal'));
 
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
   overlay.addEventListener('click', (e) => {
@@ -128,8 +133,70 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeModal('help-modal');
     closeModal('stats-modal');
+    closeModal('leaderboard-modal');
   }
 });
+
+// ── Leaderboard ────────────────────────────────────────────────────────────
+async function loadLeaderboard() {
+  const loading = document.getElementById('lb-loading');
+  const empty   = document.getElementById('lb-empty');
+  const error   = document.getElementById('lb-error');
+  const table   = document.getElementById('lb-table');
+  const body    = document.getElementById('lb-body');
+
+  loading.classList.remove('hidden');
+  empty.classList.add('hidden');
+  error.classList.add('hidden');
+  table.classList.add('hidden');
+
+  try {
+    const res  = await fetch(`${CONFIG.API_URL}/leaderboard`);
+    const data = await res.json();
+    const rows = data.leaderboard || [];
+
+    loading.classList.add('hidden');
+
+    if (rows.length === 0) {
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    body.innerHTML = '';
+    rows.forEach((p, i) => {
+      const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+      const medal     = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><span class="lb-rank ${rankClass}">${medal}</span></td>
+        <td class="lb-player">${p.username}</td>
+        <td class="lb-wins">${p.won}</td>
+        <td>${p.winPct}%</td>
+        <td>${p.streak}</td>
+        <td>${p.maxStreak}</td>`;
+      body.appendChild(tr);
+    });
+    table.classList.remove('hidden');
+  } catch (_) {
+    loading.classList.add('hidden');
+    error.classList.remove('hidden');
+  }
+}
+
+async function saveResultToServer(won, guessCount) {
+  const session = getSession();
+  if (!session) return;
+  try {
+    await fetch(`${CONFIG.API_URL}/save-result`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${session.token}`
+      },
+      body: JSON.stringify({ won, guessCount })
+    });
+  } catch (_) { /* silent — local stats still recorded */ }
+}
 
 // ── New Game ───────────────────────────────────────────────────────────────
 function resetBoard() {
@@ -293,6 +360,7 @@ function revealRow(row, guess, result) {
       showToast(msgs[currentRow - 1] ?? 'Nice!', 2000);
       bounceRow(row);
       recordResult(true, currentRow);
+      saveResultToServer(true, currentRow);
       gameOver = true;
       markGameDone();
       updateActiveTile();
@@ -304,6 +372,7 @@ function revealRow(row, guess, result) {
     } else if (currentRow >= MAX_ROWS) {
       showToast(TARGET, 3500);
       recordResult(false, null);
+      saveResultToServer(false, null);
       gameOver = true;
       markGameDone();
       updateActiveTile();

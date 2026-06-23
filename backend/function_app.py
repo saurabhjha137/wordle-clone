@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 import azure.functions as func
 
 from utils.validate import validate_register, validate_login
-from utils.db       import find_user_by_username, find_user_by_email, create_user
-from utils.auth     import sign_token
+from utils.db       import (find_user_by_username, find_user_by_email,
+                             create_user, update_user_stats, get_leaderboard)
+from utils.auth     import sign_token, verify_token, extract_bearer_token
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 log = logging.getLogger(__name__)
@@ -25,6 +26,17 @@ def _json(body: dict, status: int = 200) -> func.HttpResponse:
     )
 
 
+def _cors_preflight(methods: str) -> func.HttpResponse:
+    return func.HttpResponse(
+        status_code=204,
+        headers={
+            'Access-Control-Allow-Origin':  '*',
+            'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+            'Access-Control-Allow-Methods': methods,
+        }
+    )
+
+
 def _parse_body(req: func.HttpRequest):
     try:
         return req.get_json(), None
@@ -37,10 +49,7 @@ def _parse_body(req: func.HttpRequest):
 @app.route(route='register', methods=['POST', 'OPTIONS'])
 def register(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == 'OPTIONS':
-        return func.HttpResponse(status_code=204,
-                                 headers={'Access-Control-Allow-Origin': '*',
-                                          'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                                          'Access-Control-Allow-Methods': 'POST,OPTIONS'})
+        return _cors_preflight('POST,OPTIONS')
 
     body, err = _parse_body(req)
     if err:
@@ -91,10 +100,7 @@ def register(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route='login', methods=['POST', 'OPTIONS'])
 def login(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == 'OPTIONS':
-        return func.HttpResponse(status_code=204,
-                                 headers={'Access-Control-Allow-Origin': '*',
-                                          'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-                                          'Access-Control-Allow-Methods': 'POST,OPTIONS'})
+        return _cors_preflight('POST,OPTIONS')
 
     body, err = _parse_body(req)
     if err:
@@ -108,7 +114,6 @@ def login(req: func.HttpRequest) -> func.HttpResponse:
         return _json({'errors': errors}, 400)
 
     user = find_user_by_username(username)
-
     _invalid = {'errors': {'form': 'Invalid username or password.'}}
 
     if not user:
@@ -127,3 +132,57 @@ def login(req: func.HttpRequest) -> func.HttpResponse:
             'email':       user['email']
         }
     })
+
+
+# ── POST /api/save-result ──────────────────────────────────────────────────
+
+@app.route(route='save-result', methods=['POST', 'OPTIONS'])
+def save_result(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == 'OPTIONS':
+        return _cors_preflight('POST,OPTIONS')
+
+    token   = extract_bearer_token(req)
+    payload = verify_token(token) if token else None
+    if not payload:
+        return _json({'error': 'Unauthorized'}, 401)
+
+    body, err = _parse_body(req)
+    if err:
+        return err
+
+    try:
+        won         = bool(body.get('won'))
+        guess_count = body.get('guessCount')
+        update_user_stats(payload['username'], won, guess_count)
+        return _json({'ok': True})
+    except Exception as e:
+        log.error('save_result error: %s', e)
+        return _json({'error': 'Could not save result.'}, 500)
+
+
+# ── GET /api/leaderboard ───────────────────────────────────────────────────
+
+@app.route(route='leaderboard', methods=['GET', 'OPTIONS'])
+def leaderboard(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == 'OPTIONS':
+        return _cors_preflight('GET,OPTIONS')
+
+    try:
+        rows   = get_leaderboard(limit=10)
+        result = []
+        for row in rows:
+            s = row.get('stats', {})
+            played = s.get('played', 0)
+            won    = s.get('won', 0)
+            result.append({
+                'username':  row.get('displayName') or row.get('username'),
+                'won':       won,
+                'played':    played,
+                'winPct':    round((won / played) * 100) if played > 0 else 0,
+                'streak':    s.get('streak', 0),
+                'maxStreak': s.get('maxStreak', 0),
+            })
+        return _json({'leaderboard': result})
+    except Exception as e:
+        log.error('leaderboard error: %s', e)
+        return _json({'error': 'Could not fetch leaderboard.'}, 500)

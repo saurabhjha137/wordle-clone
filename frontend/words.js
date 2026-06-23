@@ -87,5 +87,11 @@ function getDailyWord() {
 }
 
 function getWordByIndex(idx) {
-  return WORDS[((idx % WORDS.length) + WORDS.length) % WORDS.length].toUpperCase();
+  // Integer hash so word order is shuffled, not sequential
+  let h = idx ^ (idx >>> 16);
+  h = Math.imul(h, 0x45d9f3b);
+  h = h ^ (h >>> 16);
+  h = Math.imul(h, 0x45d9f3b);
+  h = h ^ (h >>> 16);
+  return WORDS[Math.abs(h) % WORDS.length].toUpperCase();
 }

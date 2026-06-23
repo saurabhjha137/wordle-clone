@@ -529,6 +529,72 @@ main {
 .new-game-btn:active { transform: scale(0.97); }
 .new-game-btn.hidden { display: none; }
 
+/* ── Leaderboard ── */
+.lb-status {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 20px 0;
+}
+
+.lb-status.hidden { display: none; }
+
+.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.lb-table.hidden { display: none; }
+
+.lb-table thead th {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0 6px 10px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.lb-table thead th:nth-child(2) { text-align: left; }
+
+.lb-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+
+.lb-table tbody tr:last-child { border-bottom: none; }
+.lb-table tbody tr:hover { background: var(--surface-2); }
+
+.lb-table tbody td {
+  padding: 10px 6px;
+  text-align: center;
+  color: var(--text);
+}
+
+.lb-table tbody td:nth-child(2) { text-align: left; }
+
+.lb-rank {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.lb-rank.gold   { color: #f5c842; }
+.lb-rank.silver { color: #a8b0bb; }
+.lb-rank.bronze { color: #cd7f32; }
+
+.lb-player {
+  font-weight: 600;
+}
+
+.lb-wins {
+  color: var(--correct);
+  font-weight: 700;
+}
+
 /* ── Hint bar ── */
 .game-hint {
   display: flex;
