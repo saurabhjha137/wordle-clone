@@ -36,6 +36,16 @@
           <rect x="3" y="14" width="3" height="6" rx="1.5"/>
         </svg>
       </button>
+      <div id="user-area" class="user-area hidden">
+        <span id="user-greeting" class="user-greeting"></span>
+        <button class="icon-btn" id="logout-btn" aria-label="Logout" title="Logout">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -45,36 +55,45 @@
   <main>
     <!-- Game board -->
     <div id="board">
-      <div class="row" id="row-0">
+      <div class="row" id="row-0" data-attempt="1">
         <div class="tile" id="r0c0"></div><div class="tile" id="r0c1"></div>
         <div class="tile" id="r0c2"></div><div class="tile" id="r0c3"></div>
         <div class="tile" id="r0c4"></div>
       </div>
-      <div class="row" id="row-1">
+      <div class="row" id="row-1" data-attempt="2">
         <div class="tile" id="r1c0"></div><div class="tile" id="r1c1"></div>
         <div class="tile" id="r1c2"></div><div class="tile" id="r1c3"></div>
         <div class="tile" id="r1c4"></div>
       </div>
-      <div class="row" id="row-2">
+      <div class="row" id="row-2" data-attempt="3">
         <div class="tile" id="r2c0"></div><div class="tile" id="r2c1"></div>
         <div class="tile" id="r2c2"></div><div class="tile" id="r2c3"></div>
         <div class="tile" id="r2c4"></div>
       </div>
-      <div class="row" id="row-3">
+      <div class="row" id="row-3" data-attempt="4">
         <div class="tile" id="r3c0"></div><div class="tile" id="r3c1"></div>
         <div class="tile" id="r3c2"></div><div class="tile" id="r3c3"></div>
         <div class="tile" id="r3c4"></div>
       </div>
-      <div class="row" id="row-4">
+      <div class="row" id="row-4" data-attempt="5">
         <div class="tile" id="r4c0"></div><div class="tile" id="r4c1"></div>
         <div class="tile" id="r4c2"></div><div class="tile" id="r4c3"></div>
         <div class="tile" id="r4c4"></div>
       </div>
-      <div class="row" id="row-5">
+      <div class="row" id="row-5" data-attempt="6">
         <div class="tile" id="r5c0"></div><div class="tile" id="r5c1"></div>
         <div class="tile" id="r5c2"></div><div class="tile" id="r5c3"></div>
         <div class="tile" id="r5c4"></div>
       </div>
+    </div>
+
+    <!-- Hint bar -->
+    <div class="game-hint">
+      <span>Type a 5-letter word left to right</span>
+      <span class="hint-divider">·</span>
+      <span><kbd>ENTER</kbd> to submit</span>
+      <span class="hint-divider">·</span>
+      <span><kbd>⌫</kbd> to delete</span>
     </div>
 
     <!-- On-screen keyboard -->
@@ -193,7 +212,100 @@
     </div>
   </div>
 
+  <!-- ── Auth Overlay ── -->
+  <div id="auth-overlay">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="auth-brand-icon">W</div>
+        <h1 class="auth-logo">WORDLE</h1>
+      </div>
+      <p class="auth-subtitle">Guess the hidden 5-letter word in 6 tries</p>
+
+      <div class="auth-tabs">
+        <div class="tab-slider" id="tab-slider"></div>
+        <button class="auth-tab active" id="tab-login" type="button">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h11M10 6l4 4-4 4"/><circle cx="14" cy="10" r="0"/><path d="M7 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
+          Sign In
+        </button>
+        <button class="auth-tab" id="tab-register" type="button">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="7" r="3"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M15 4v4M13 6h4"/></svg>
+          Register
+        </button>
+      </div>
+
+      <!-- ── Login Form ── -->
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label for="login-username">Username</label>
+          <input id="login-username" type="text" placeholder="Your username"
+                 autocomplete="username" autocapitalize="none" spellcheck="false" />
+          <span class="field-error" id="err-login-username"></span>
+        </div>
+
+        <div class="field">
+          <label for="login-password">Password</label>
+          <div class="pw-wrap">
+            <input id="login-password" type="password" placeholder="Your password"
+                   autocomplete="current-password" />
+            <button type="button" class="pw-toggle" data-target="login-password" aria-label="Show password">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <span class="field-error" id="err-login-password"></span>
+        </div>
+
+        <span class="field-error form-error" id="err-login-form"></span>
+        <button type="submit" class="auth-submit" id="login-submit">Sign In</button>
+      </form>
+
+      <!-- ── Register Form ── -->
+      <form id="register-form" class="hidden" novalidate>
+        <div class="field">
+          <label for="reg-username">Username</label>
+          <input id="reg-username" type="text" placeholder="3–20 chars, letters / numbers / _"
+                 autocomplete="username" autocapitalize="none" spellcheck="false"
+                 minlength="3" maxlength="20" />
+          <span class="field-error" id="err-reg-username"></span>
+        </div>
+
+        <div class="field">
+          <label for="reg-email">Email</label>
+          <input id="reg-email" type="email" placeholder="you@example.com"
+                 autocomplete="email" />
+          <span class="field-error" id="err-reg-email"></span>
+        </div>
+
+        <div class="field">
+          <label for="reg-password">Password</label>
+          <div class="pw-wrap">
+            <input id="reg-password" type="password" placeholder="Min 8 chars, letter + number"
+                   autocomplete="new-password" />
+            <button type="button" class="pw-toggle" data-target="reg-password" aria-label="Show password">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <span class="field-error" id="err-reg-password"></span>
+          <div class="pw-strength" id="pw-strength" aria-hidden="true">
+            <div class="pw-bar" id="pw-bar"></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="reg-age">Age</label>
+          <input id="reg-age" type="number" placeholder="Must be 13 or older"
+                 min="13" max="120" />
+          <span class="field-error" id="err-reg-age"></span>
+        </div>
+
+        <span class="field-error form-error" id="err-reg-form"></span>
+        <button type="submit" class="auth-submit" id="register-submit">Create Account</button>
+      </form>
+    </div>
+  </div>
+
   <script src="words.js"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

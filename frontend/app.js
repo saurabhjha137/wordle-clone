@@ -126,14 +126,28 @@ document.getElementById('keyboard').addEventListener('click', (e) => {
   else                       addLetter(k.toUpperCase());
 });
 
+// ── Active tile & row tracking ─────────────────────────────────────────────
+function updateActiveTile() {
+  document.querySelectorAll('.tile.active-tile').forEach(t => t.classList.remove('active-tile'));
+  document.querySelectorAll('.row.active-row').forEach(r => r.classList.remove('active-row'));
+  if (gameOver) return;
+
+  document.getElementById(`row-${currentRow}`).classList.add('active-row');
+  if (currentCol < WORD_LEN) {
+    getTile(currentRow, currentCol).classList.add('active-tile');
+  }
+}
+
 // ── Game actions ───────────────────────────────────────────────────────────
 function addLetter(letter) {
   if (currentCol >= WORD_LEN) return;
   const tile = getTile(currentRow, currentCol);
+  tile.classList.remove('active-tile');
   tile.textContent = letter;
   tile.classList.add('filled');
   currentGuess.push(letter);
   currentCol++;
+  updateActiveTile();
 }
 
 function deleteLetter() {
@@ -143,6 +157,7 @@ function deleteLetter() {
   const tile = getTile(currentRow, currentCol);
   tile.textContent = '';
   tile.classList.remove('filled');
+  updateActiveTile();
 }
 
 function submitGuess() {
@@ -218,12 +233,16 @@ function revealRow(row, guess, result) {
       bounceRow(row);
       recordResult(true, currentRow);
       gameOver = true;
+      updateActiveTile();
       setTimeout(() => { renderStats(currentRow); openModal('stats-modal'); }, 2200);
     } else if (currentRow >= MAX_ROWS) {
       showToast(TARGET, 3500);
       recordResult(false, null);
       gameOver = true;
+      updateActiveTile();
       setTimeout(() => { renderStats(); openModal('stats-modal'); }, 2500);
+    } else {
+      updateActiveTile();
     }
   }, totalDelay);
 }
@@ -256,3 +275,13 @@ function updateKey(letter, state) {
 document.getElementById('date-label').textContent = new Date().toLocaleDateString('en-US', {
   month: 'long', day: 'numeric', year: 'numeric'
 });
+
+updateActiveTile();
+
+// Block keyboard input while auth overlay is visible
+const _origKeydown = document.onkeydown;
+document.addEventListener('keydown', (e) => {
+  if (!document.getElementById('auth-overlay').classList.contains('hidden')) {
+    e.stopImmediatePropagation();
+  }
+}, true);
