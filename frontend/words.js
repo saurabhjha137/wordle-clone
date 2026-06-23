@@ -82,6 +82,10 @@ const VALID_GUESSES = new Set(WORDS);
 function getDailyWord() {
   const now   = new Date();
   const start = new Date(now.getFullYear(), 0, 0);
-  const day   = Math.floor((now - start) / 86400000); // day index in year
+  const day   = Math.floor((now - start) / 86400000);
   return WORDS[day % WORDS.length].toUpperCase();
+}
+
+function getWordByIndex(idx) {
+  return WORDS[((idx % WORDS.length) + WORDS.length) % WORDS.length].toUpperCase();
 }

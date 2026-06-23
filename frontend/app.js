@@ -1,5 +1,5 @@
 // ── State ──────────────────────────────────────────────────────────────────
-const TARGET   = getDailyWord();
+let TARGET;
 const MAX_ROWS = 6;
 const WORD_LEN = 5;
 
@@ -18,6 +18,29 @@ function showToast(msg, duration = 1400) {
   t.classList.remove('hidden');
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.add('hidden'), duration);
+}
+
+// ── Game persistence ───────────────────────────────────────────────────────
+const GAME_INDEX_KEY = 'wordle_game_index';
+const GAME_DONE_KEY  = 'wordle_game_done';
+
+function getGameIndex() {
+  const stored = localStorage.getItem(GAME_INDEX_KEY);
+  if (stored !== null) return parseInt(stored, 10);
+  // Seed with days-since-epoch so the first word isn't always WORDS[0]
+  const seed = Math.floor(Date.now() / 86400000);
+  localStorage.setItem(GAME_INDEX_KEY, seed);
+  return seed;
+}
+
+function markGameDone() {
+  localStorage.setItem(GAME_DONE_KEY, 'true');
+}
+
+function advanceGame() {
+  const next = getGameIndex() + 1;
+  localStorage.setItem(GAME_INDEX_KEY, next);
+  localStorage.removeItem(GAME_DONE_KEY);
 }
 
 // ── Stats (localStorage) ───────────────────────────────────────────────────
@@ -88,7 +111,11 @@ function closeModal(id) {
 
 document.getElementById('help-btn').addEventListener('click',  () => openModal('help-modal'));
 document.getElementById('help-close').addEventListener('click', () => closeModal('help-modal'));
-document.getElementById('stats-btn').addEventListener('click',  () => { renderStats(); openModal('stats-modal'); });
+document.getElementById('stats-btn').addEventListener('click',  () => {
+  renderStats();
+  document.getElementById('new-game-btn').classList.toggle('hidden', !gameOver);
+  openModal('stats-modal');
+});
 document.getElementById('stats-close').addEventListener('click', () => closeModal('stats-modal'));
 
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -103,6 +130,40 @@ document.addEventListener('keydown', (e) => {
     closeModal('stats-modal');
   }
 });
+
+// ── New Game ───────────────────────────────────────────────────────────────
+function resetBoard() {
+  currentRow   = 0;
+  currentCol   = 0;
+  currentGuess = [];
+  gameOver     = false;
+
+  for (let r = 0; r < MAX_ROWS; r++) {
+    for (let c = 0; c < WORD_LEN; c++) {
+      const tile = getTile(r, c);
+      tile.textContent = '';
+      tile.className   = 'tile';
+    }
+  }
+
+  document.querySelectorAll('.key').forEach(k => {
+    const wide = k.dataset.key === 'Enter' || k.dataset.key === 'Backspace';
+    delete k.dataset.state;
+    k.className = wide ? 'key wide' : 'key';
+  });
+
+  updateActiveTile();
+}
+
+function startNewGame() {
+  closeModal('stats-modal');
+  advanceGame();
+  TARGET = getWordByIndex(getGameIndex());
+  document.getElementById('new-game-btn').classList.add('hidden');
+  resetBoard();
+}
+
+document.getElementById('new-game-btn').addEventListener('click', startNewGame);
 
 // ── Game input ─────────────────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
@@ -233,14 +294,24 @@ function revealRow(row, guess, result) {
       bounceRow(row);
       recordResult(true, currentRow);
       gameOver = true;
+      markGameDone();
       updateActiveTile();
-      setTimeout(() => { renderStats(currentRow); openModal('stats-modal'); }, 2200);
+      setTimeout(() => {
+        renderStats(currentRow);
+        document.getElementById('new-game-btn').classList.remove('hidden');
+        openModal('stats-modal');
+      }, 2200);
     } else if (currentRow >= MAX_ROWS) {
       showToast(TARGET, 3500);
       recordResult(false, null);
       gameOver = true;
+      markGameDone();
       updateActiveTile();
-      setTimeout(() => { renderStats(); openModal('stats-modal'); }, 2500);
+      setTimeout(() => {
+        renderStats();
+        document.getElementById('new-game-btn').classList.remove('hidden');
+        openModal('stats-modal');
+      }, 2500);
     } else {
       updateActiveTile();
     }
@@ -276,10 +347,10 @@ document.getElementById('date-label').textContent = new Date().toLocaleDateStrin
   month: 'long', day: 'numeric', year: 'numeric'
 });
 
+TARGET = getWordByIndex(getGameIndex());
 updateActiveTile();
 
 // Block keyboard input while auth overlay is visible
-const _origKeydown = document.onkeydown;
 document.addEventListener('keydown', (e) => {
   if (!document.getElementById('auth-overlay').classList.contains('hidden')) {
     e.stopImmediatePropagation();
