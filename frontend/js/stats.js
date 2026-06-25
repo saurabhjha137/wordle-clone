@@ -10,8 +10,14 @@ export function recordResult(won, guessCount, wordLen) {
 
   if (won) {
     s.won = (s.won || 0) + 1;
-    s.streak    = s.lastWon === yesterday ? (s.streak || 0) + 1 : 1;
-    s.maxStreak = Math.max(s.streak, s.maxStreak || 0);
+    if (s.lastWon === today) {
+      // already won today — keep streak as-is, don't double-count
+    } else if (s.lastWon === yesterday) {
+      s.streak = (s.streak || 0) + 1;
+    } else {
+      s.streak = 1;
+    }
+    s.maxStreak = Math.max(s.streak || 0, s.maxStreak || 0);
     s.lastWon   = today;
 
     // Per-length distribution

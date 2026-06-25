@@ -42,6 +42,14 @@
     </div>
 
     <div class="header-side right">
+      <!-- Shown only to ggBoy via JS -->
+      <button class="icon-btn hidden" id="create-room-btn" aria-label="Create Room" title="Create Room">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 11v6M20 14h6"/>
+        </svg>
+      </button>
       <button class="icon-btn" id="stats-btn" aria-label="Statistics">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
           <rect x="18" y="10" width="3" height="10" rx="1.5"/>
@@ -125,6 +133,7 @@
 
     <!-- Game-over panel — shown on the board after every end (win / lose / timeout) -->
     <div id="game-over-panel" class="game-over-panel hidden">
+      <div id="game-over-meta" class="game-over-meta hidden"></div>
       <div id="game-over-word-wrap" class="game-over-word-wrap hidden">
         <span class="game-over-label">The word was</span>
         <span id="game-over-word" class="game-over-word"></span>
@@ -310,6 +319,56 @@
         <span class="field-error form-error" id="err-reg-form"></span>
         <button type="submit" class="auth-submit" id="register-submit">Create Account</button>
       </form>
+    </div>
+  </div>
+
+  <!-- ── Room Invite Popup (floating, shown to invited players) ── -->
+  <div id="invite-popup" class="invite-popup hidden">
+    <div class="invite-top">
+      <span class="invite-icon">🎮</span>
+      <div class="invite-text">
+        <strong id="invite-challenger"></strong>
+        <span id="invite-meta"></span>
+      </div>
+    </div>
+    <div class="invite-actions">
+      <button class="invite-btn invite-btn--dismiss" id="invite-dismiss">Dismiss</button>
+      <button class="invite-btn invite-btn--join"    id="invite-join">Join Game →</button>
+    </div>
+  </div>
+
+  <!-- ── Create Room Modal (ggBoy only) ── -->
+  <div id="create-room-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>CREATE ROOM</h2>
+        <button class="modal-close" id="cr-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="cr-word">5-Letter Word</label>
+          <input id="cr-word" type="text" maxlength="5" placeholder="ENTER"
+                 autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <span class="field-error" id="cr-word-err"></span>
+        </div>
+        <div class="field">
+          <label for="cr-time">Time Limit</label>
+          <select id="cr-time" class="cr-select">
+            <option value="60">1:00</option>
+            <option value="90">1:30</option>
+            <option value="120" selected>2:00</option>
+            <option value="180">3:00</option>
+            <option value="300">5:00</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Select Players</label>
+          <div id="cr-player-list" class="cr-player-list">Loading players…</div>
+          <span class="field-error" id="cr-players-err"></span>
+        </div>
+        <span class="field-error form-error" id="cr-form-err"></span>
+        <button class="auth-submit" id="cr-submit">Create Room</button>
+      </div>
     </div>
   </div>
 

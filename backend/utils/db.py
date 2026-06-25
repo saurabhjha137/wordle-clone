@@ -48,11 +48,16 @@ def update_user_stats(username: str, won: bool, guess_count: int | None):
 
     s['played'] = s.get('played', 0) + 1
     if won:
-        s['won']      = s.get('won', 0) + 1
-        last_won      = s.get('lastWon', '')
-        s['streak']   = s.get('streak', 0) + 1 if last_won == yesterday else 1
+        s['won']     = s.get('won', 0) + 1
+        last_won     = s.get('lastWon', '')
+        if last_won == today:
+            pass                                        # already won today — don't touch streak
+        elif last_won == yesterday:
+            s['streak'] = s.get('streak', 0) + 1       # extend streak
+        else:
+            s['streak'] = 1                             # new streak or gap in days
         s['maxStreak'] = max(s.get('maxStreak', 0), s['streak'])
-        s['lastWon']  = today
+        s['lastWon']   = today
     else:
         s['streak'] = 0
 
@@ -67,3 +72,38 @@ def get_leaderboard(limit: int = 10) -> list:
     ))
     items.sort(key=lambda x: x.get('stats', {}).get('won', 0), reverse=True)
     return items[:limit]
+
+
+# ── Room helpers ───────────────────────────────────────────────────────────
+
+def list_all_users() -> list:
+    return list(_get_container().query_items(
+        query="SELECT c.username, c.displayName FROM c WHERE NOT IS_DEFINED(c.type)",
+        enable_cross_partition_query=True
+    ))
+
+
+def create_room(room: dict):
+    return _get_container().create_item(body=room)
+
+
+def find_room_by_id(room_id: str):
+    results = list(_get_container().query_items(
+        query="SELECT * FROM c WHERE c.id = @id AND c.type = 'room'",
+        parameters=[{'name': '@id', 'value': room_id}],
+        enable_cross_partition_query=True
+    ))
+    return results[0] if results else None
+
+
+def get_pending_invites(username: str) -> list:
+    results = list(_get_container().query_items(
+        query="SELECT * FROM c WHERE c.type = 'room' AND ARRAY_CONTAINS(c.players, @username)",
+        parameters=[{'name': '@username', 'value': username.lower()}],
+        enable_cross_partition_query=True
+    ))
+    return [r for r in results if r.get('playerStatus', {}).get(username.lower()) == 'pending']
+
+
+def update_room(room: dict):
+    return _get_container().upsert_item(room)

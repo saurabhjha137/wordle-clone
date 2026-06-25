@@ -85,6 +85,7 @@ h1 {
 .header-side {
   display: flex;
   align-items: center;
+  gap: 2px;
 }
 
 .header-side.right {
@@ -247,6 +248,8 @@ main {
 .tile:nth-child(3).bounce { animation-delay: 0.16s; }
 .tile:nth-child(4).bounce { animation-delay: 0.24s; }
 .tile:nth-child(5).bounce { animation-delay: 0.32s; }
+.tile:nth-child(6).bounce { animation-delay: 0.40s; }
+.tile:nth-child(7).bounce { animation-delay: 0.48s; }
 
 /* example tiles in help modal */
 .tile.ex-empty {
@@ -522,8 +525,15 @@ main {
 
 /* ── Game-over panel (appears on board after every game end) ── */
 .game-over-panel {
-  width: 100%;
-  max-width: 480px;
+  /* Fixed to viewport — always visible regardless of board size or scroll position */
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 440px;
+  z-index: 9999;
+
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -532,8 +542,17 @@ main {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.4);
-  animation: panel-rise 0.35s cubic-bezier(.16,1,.3,1) both;
+  box-shadow: 0 12px 40px rgba(0,0,0,.6);
+
+  /* Transition only opacity + bottom (transform is used for centering, not animated) */
+  transition: opacity 0.3s ease, bottom 0.3s ease;
+  opacity: 1;
+}
+
+/* Start state — set for one paint before transition fires */
+.game-over-panel.panel-entering {
+  opacity: 0;
+  bottom: 8px;
 }
 
 .game-over-panel.hidden { display: none; }
@@ -1002,20 +1021,40 @@ main {
 .user-area {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  padding-left: 8px;
+  margin-left: 4px;
+  border-left: 1px solid var(--border);
 }
 
 .user-area.hidden { display: none; }
 
+/* Avatar circle — shows user's initial letter */
 .user-greeting {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
   font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+  cursor: default;
 }
+
+/* Create-room button — golden tint so it reads as "special" */
+#create-room-btn:not(.hidden) {
+  color: #e8a020;
+}
+#create-room-btn:not(.hidden):hover {
+  color: #f4b942;
+  background: rgba(244, 185, 66, 0.1);
+}
+
 
 /* ── Timer ── */
 .timer-bar-wrap {
@@ -1183,6 +1222,149 @@ main {
 
 /* ── Hidden game wrapper ── */
 #main-game.hidden { display: none; }
+
+/* ── Game-over meta (room challenge info) ── */
+.game-over-meta {
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  padding: 2px 0 4px;
+}
+.game-over-meta.hidden { display: none; }
+
+/* ── Room Invite Popup ── */
+.invite-popup {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 600;
+  width: min(460px, calc(100vw - 24px));
+  background: var(--surface);
+  border: 1.5px solid var(--accent);
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.55);
+  padding: 18px 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: panel-rise 0.3s cubic-bezier(.16,1,.3,1) both;
+}
+.invite-popup.hidden { display: none; }
+
+.invite-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.invite-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.invite-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.invite-text strong {
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.invite-text span {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.invite-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.invite-btn {
+  padding: 11px 8px;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.83rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.invite-btn:active { transform: scale(0.97); }
+
+.invite-btn--join {
+  background: var(--accent);
+  color: #fff;
+}
+.invite-btn--join:hover { background: #7c7df9; }
+
+.invite-btn--dismiss {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+}
+.invite-btn--dismiss:hover { color: var(--text); border-color: var(--border-active); }
+
+/* ── Create Room Modal (ggBoy) ── */
+.cr-select {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.cr-select:focus { border-color: var(--accent); }
+
+.cr-player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 4px;
+}
+
+.cr-player-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.cr-player-item:hover { background: var(--border); }
+.cr-player-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.cr-username {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
 
 /* ── Mobile ── */
 @media (max-width: 420px) {

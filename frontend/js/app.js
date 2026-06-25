@@ -11,6 +11,9 @@ import { evaluateGuess, revealRow,
 import { recordResult, renderStats }               from './stats.js';
 import { saveResultToServer, loadLeaderboard }     from './leaderboard.js';
 import { initAuth, showAuth, showGame, getSession } from './auth.js';
+import { ROOT_USERNAME, startPolling, fetchUsers,
+         createRoom, joinRoom, submitRoomResult,
+         setRoomStatus, stopPolling }               from './rooms.js';
 
 // ── Word cipher (XOR + base64) ─────────────────────────────────────────────
 const _CIPHER_KEY = [87, 82, 68, 76]; // 'WRDL'
@@ -32,6 +35,13 @@ let currentCol   = 0;
 let currentGuess = [];
 let gameOver     = false;
 let activeTimer  = null;
+
+// ── Room state ─────────────────────────────────────────────────────────────
+let activeRoomId      = null;
+let activeRoomCreator = null;
+let clearInviteState  = () => {};
+
+const ALLOWED_ROOM_TIME_LIMITS = new Set([60, 90, 120, 180, 300]);
 
 // ── Toast ──────────────────────────────────────────────────────────────────
 function showToast(msg, duration = 1400) {
@@ -73,36 +83,55 @@ function setupModals() {
       closeModal('help-modal');
       closeModal('stats-modal');
       closeModal('leaderboard-modal');
+      closeModal('create-room-modal');
     }
   });
 }
 
-// ── Game-over panel (on the board, not in a modal) ────────────────────────
+// ── Game-over panel ────────────────────────────────────────────────────────
 function showEndGamePanel(showWord) {
   const panel    = document.getElementById('game-over-panel');
+  if (!panel) return;
+
   const wordWrap = document.getElementById('game-over-word-wrap');
   const wordEl   = document.getElementById('game-over-word');
+  const meta     = document.getElementById('game-over-meta');
 
-  // Hide keyboard & hint — they're useless after game ends and take up space
-  document.getElementById('keyboard').classList.add('kb-hidden');
-  document.querySelector('.game-hint').classList.add('hint-hidden');
+  const kb   = document.getElementById('keyboard');
+  const hint = document.querySelector('.game-hint');
+  if (kb)   kb.classList.add('kb-hidden');
+  if (hint) hint.classList.add('hint-hidden');
 
-  // Reset animation so it replays on every game end (not just the first)
-  panel.style.animation = 'none';
-  panel.classList.remove('hidden');
-  panel.offsetHeight; // force reflow — required for animation restart
-  panel.style.animation = '';
+  // Show panel — remove hidden, force display and opacity via inline style so
+  // there is no dependency on CSS animation/transition state
+  panel.classList.remove('hidden', 'panel-entering');
+  panel.style.display  = 'flex';
+  panel.style.opacity  = '1';
+  panel.style.bottom   = '24px';
 
   if (showWord && target) {
-    wordEl.textContent = target;
-    wordWrap.classList.remove('hidden');
+    if (wordEl)   wordEl.textContent = target;
+    if (wordWrap) wordWrap.classList.remove('hidden');
   } else {
-    wordWrap.classList.add('hidden');
+    if (wordWrap) wordWrap.classList.add('hidden');
+  }
+
+  if (activeRoomCreator && meta) {
+    meta.textContent = `👑 Challenge by ${activeRoomCreator}`;
+    meta.classList.remove('hidden');
+  } else if (meta) {
+    meta.classList.add('hidden');
   }
 }
 
 function hideEndGamePanel() {
-  document.getElementById('game-over-panel').classList.add('hidden');
+  const panel = document.getElementById('game-over-panel');
+  if (!panel) return;
+  panel.style.display = '';
+  panel.style.opacity = '';
+  panel.style.bottom  = '';
+  panel.classList.remove('panel-entering');
+  panel.classList.add('hidden');
 }
 
 // ── Length picker ──────────────────────────────────────────────────────────
@@ -119,6 +148,14 @@ function showLengthPicker() {
 function hideLengthPicker() {
   document.getElementById('length-picker').classList.add('hidden');
   document.getElementById('main-game').classList.remove('hidden');
+}
+
+function hideAllModals() {
+  document.querySelectorAll('.modal-overlay').forEach(overlay => closeModal(overlay.id));
+}
+
+function setCreateRoomVisible(isVisible) {
+  document.getElementById('create-room-btn').classList.toggle('hidden', !isVisible);
 }
 
 function renderPickerOptions() {
@@ -195,6 +232,50 @@ async function startGame(len) {
   activeTimer.start();
 }
 
+async function startRoomGame(roomId, cipheredWord, timeLimit, createdBy) {
+  const seconds = Number(timeLimit);
+  if (!ALLOWED_ROOM_TIME_LIMITS.has(seconds)) {
+    showToast('Invalid room timer.');
+    return false;
+  }
+
+  wordLen      = 5;
+  maxRows      = ATTEMPTS_BY_LENGTH[5];
+  currentRow   = 0;
+  currentCol   = 0;
+  currentGuess = [];
+  gameOver     = false;
+  target       = '';
+  activeRoomId      = roomId;
+  activeRoomCreator = createdBy;
+
+  saveChosenLength(5);
+
+  document.getElementById('keyboard').classList.remove('kb-hidden');
+  document.querySelector('.game-hint').classList.remove('hint-hidden');
+
+  buildBoard(5, maxRows);
+  resetKeyboard();
+  hideEndGamePanel();
+  hideLengthPicker();
+  document.getElementById('main-game').classList.remove('hidden');
+  document.getElementById('hint-word-len').textContent = 5;
+
+  if (activeTimer) activeTimer.stop();
+  hideTimerUI();
+
+  target = decipherWord(cipheredWord);
+  updateActiveTile(0, 0, 5, false);
+
+  activeTimer = new Timer(
+    seconds,
+    (remaining, total) => updateTimerUI(remaining, total),
+    () => onTimeUp()
+  );
+  activeTimer.start();
+  return true;
+}
+
 function onTimeUp() {
   if (gameOver) return;
   gameOver = true;
@@ -202,9 +283,10 @@ function onTimeUp() {
   showToast(`⏰ Time's up!`, 2000);
   recordResult(false, null, wordLen);
   saveResultToServer(false, null, wordLen);
+  if (activeRoomId) submitRoomResult(activeRoomId, false, null);
   updateActiveTile(currentRow, currentCol, wordLen, true);
   setTimeout(() => {
-    renderStats(wordLen);
+    try { renderStats(wordLen); } catch (_) {}
     showEndGamePanel(true);
   }, 1800);
 }
@@ -212,6 +294,30 @@ function onTimeUp() {
 function endGame() {
   if (activeTimer) activeTimer.stop();
   hideTimerUI();
+}
+
+function resetSessionUI() {
+  stopPolling();
+  if (activeTimer) activeTimer.stop();
+  activeTimer = null;
+  activeRoomId = null;
+  activeRoomCreator = null;
+  target = '';
+  currentRow = 0;
+  currentCol = 0;
+  currentGuess = [];
+  gameOver = true;
+
+  hideTimerUI();
+  hideAllModals();
+  hideEndGamePanel();
+  document.getElementById('length-picker').classList.add('hidden');
+  document.getElementById('main-game').classList.add('hidden');
+  document.getElementById('invite-popup').classList.add('hidden');
+  clearInviteState();
+  document.getElementById('keyboard').classList.remove('kb-hidden');
+  document.querySelector('.game-hint').classList.remove('hint-hidden');
+  setCreateRoomVisible(false);
 }
 
 // ── Input handlers ─────────────────────────────────────────────────────────
@@ -267,24 +373,26 @@ function submitGuess() {
       bounceRow(row, wordLen);
       recordResult(true, currentRow, wordLen);
       saveResultToServer(true, currentRow, wordLen);
+      if (activeRoomId) submitRoomResult(activeRoomId, true, currentRow);
       gameOver = true;
       markGameDone(wordLen);
       endGame();
       updateActiveTile(currentRow, currentCol, wordLen, true);
       setTimeout(() => {
-        renderStats(wordLen, currentRow);
+        try { renderStats(wordLen, currentRow); } catch (_) {}
         showEndGamePanel(false);
       }, 2200);
     } else if (currentRow >= maxRows) {
       showToast(`The word was ${target}`, 3000);
       recordResult(false, null, wordLen);
       saveResultToServer(false, null, wordLen);
+      if (activeRoomId) submitRoomResult(activeRoomId, false, null);
       gameOver = true;
       markGameDone(wordLen);
       endGame();
       updateActiveTile(currentRow, currentCol, wordLen, true);
       setTimeout(() => {
-        renderStats(wordLen);
+        try { renderStats(wordLen); } catch (_) {}
         showEndGamePanel(true);
       }, 2500);
     } else {
@@ -333,6 +441,7 @@ function boot() {
 
   // End-game: Play Again (same length, next word)
   document.getElementById('play-again-btn').addEventListener('click', () => {
+    activeRoomId = null; activeRoomCreator = null;
     closeModal('stats-modal');
     advanceGame(wordLen);
     startGame(wordLen);
@@ -340,6 +449,7 @@ function boot() {
 
   // End-game: Change Mode (back to length picker)
   document.getElementById('change-mode-btn').addEventListener('click', () => {
+    activeRoomId = null; activeRoomCreator = null;
     closeModal('stats-modal');
     advanceGame(wordLen);
     showLengthPicker();
@@ -350,18 +460,143 @@ function boot() {
     startGame(pickerSelection);
   });
 
-  // Auth init
-  initAuth(user => {
-    showGame(user);
-    showLengthPicker();
+  // ── Room invite popup ────────────────────────────────────────────────────
+  const _inviteQueue = [];
+  let   _currentInvite = null;
+
+  clearInviteState = () => {
+    _inviteQueue.length = 0;
+    _currentInvite = null;
+  };
+
+  function showNextInvite() {
+    if (_inviteQueue.length === 0) { _currentInvite = null; return; }
+    _currentInvite = _inviteQueue.shift();
+    const m = Math.floor(_currentInvite.timeLimit / 60);
+    const s = _currentInvite.timeLimit % 60;
+    const ts = s === 0 ? `${m}:00` : `${m}:${String(s).padStart(2,'0')}`;
+    document.getElementById('invite-challenger').textContent =
+      `${_currentInvite.createdBy} challenged you!`;
+    document.getElementById('invite-meta').textContent =
+      `${ts} time limit · ${_currentInvite.playerCount} player${_currentInvite.playerCount > 1 ? 's' : ''}`;
+    document.getElementById('invite-popup').classList.remove('hidden');
+  }
+
+  document.getElementById('invite-dismiss').addEventListener('click', () => {
+    if (!_currentInvite) return;
+    setRoomStatus(_currentInvite.id, 'dismissed');
+    _currentInvite = null;
+    document.getElementById('invite-popup').classList.add('hidden');
+    showNextInvite();
   });
 
-  // Check existing session
+  document.getElementById('invite-join').addEventListener('click', async () => {
+    if (!_currentInvite) return;
+    const invite = _currentInvite;
+    document.getElementById('invite-popup').classList.add('hidden');
+    _currentInvite = null;
+
+    showToast('Joining room…', 1500);
+    const roomData = await joinRoom(invite.id);
+    if (!roomData) { showToast('Could not join room.'); showNextInvite(); return; }
+
+    const started = await startRoomGame(invite.id, roomData.word, roomData.timeLimit, roomData.createdBy);
+    if (started) setRoomStatus(invite.id, 'joined');
+    showNextInvite();
+  });
+
+  function onInviteReceived(invite) {
+    _inviteQueue.push(invite);
+    if (!_currentInvite) showNextInvite();
+  }
+
+  // ── Create Room modal (ggBoy only) ───────────────────────────────────────
+  function setupCreateRoom() {
+    document.getElementById('cr-close').addEventListener('click', () =>
+      closeModal('create-room-modal'));
+
+    document.getElementById('create-room-btn').addEventListener('click', async () => {
+      openModal('create-room-modal');
+      const list = document.getElementById('cr-player-list');
+      list.textContent = 'Loading players…';
+      try {
+        const users = await fetchUsers();
+        list.innerHTML = '';
+        if (!users.length) {
+          list.textContent = 'No other players registered yet.';
+          return;
+        }
+        users.forEach(u => {
+          const lbl = document.createElement('label');
+          lbl.className = 'cr-player-item';
+          lbl.innerHTML = `
+            <input type="checkbox" class="cr-player-check" value="${u.username}">
+            <span>${u.displayName}</span>
+            <span class="cr-username">@${u.username}</span>`;
+          list.appendChild(lbl);
+        });
+      } catch (_) {
+        list.textContent = 'Failed to load players.';
+      }
+    });
+
+    document.getElementById('cr-submit').addEventListener('click', async () => {
+      const word       = document.getElementById('cr-word').value.trim().toUpperCase();
+      const timeLimit  = parseInt(document.getElementById('cr-time').value, 10);
+      const checked    = [...document.querySelectorAll('.cr-player-check:checked')]
+                          .map(c => c.value);
+      const wordErr    = document.getElementById('cr-word-err');
+      const playerErr  = document.getElementById('cr-players-err');
+      const formErr    = document.getElementById('cr-form-err');
+
+      wordErr.textContent = playerErr.textContent = formErr.textContent = '';
+
+      if (!word || word.length !== 5 || !/^[A-Z]+$/.test(word)) {
+        wordErr.textContent = 'Must be exactly 5 letters (A–Z).';
+        return;
+      }
+      if (!checked.length) {
+        playerErr.textContent = 'Select at least one player.';
+        return;
+      }
+      if (!ALLOWED_ROOM_TIME_LIMITS.has(timeLimit)) {
+        formErr.textContent = 'Choose a valid time limit.';
+        return;
+      }
+
+      const btn = document.getElementById('cr-submit');
+      btn.disabled = true; btn.textContent = 'Creating…';
+      try {
+        await createRoom(word, timeLimit, checked);
+        closeModal('create-room-modal');
+        document.getElementById('cr-word').value = '';
+        document.querySelectorAll('.cr-player-check').forEach(c => c.checked = false);
+        showToast('Room created! Players have been notified.', 3000);
+      } catch (e) {
+        formErr.textContent = e.message || 'Failed to create room.';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Create Room';
+      }
+    });
+  }
+
+  // ── Auth init ────────────────────────────────────────────────────────────
+  setupCreateRoom();
+
+  function onUserLoggedIn(user) {
+    showGame(user);
+    showLengthPicker();
+    setCreateRoomVisible(user.username.toLowerCase() === ROOT_USERNAME);
+    startPolling(onInviteReceived);
+  }
+
+  initAuth(user => onUserLoggedIn(user), resetSessionUI);
+
   const session = getSession();
   if (session) {
-    showGame(session.user);
-    showLengthPicker();
+    onUserLoggedIn(session.user);
   } else {
+    resetSessionUI();
     showAuth();
   }
 }

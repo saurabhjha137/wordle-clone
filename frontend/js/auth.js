@@ -82,7 +82,10 @@ async function callApi(endpoint, body) {
 export function showGame(user) {
   $('auth-overlay').classList.add('hidden');
   $('user-area').classList.remove('hidden');
-  $('user-greeting').textContent = `Hi, ${user.displayName || user.username}`;
+  const name = user.displayName || user.username;
+  const el   = $('user-greeting');
+  el.textContent  = name[0].toUpperCase();
+  el.title        = name;
 }
 
 export function showAuth() {
@@ -91,7 +94,7 @@ export function showAuth() {
 }
 
 // ── Init auth module (call once on page load) ──────────────────────────────
-export function initAuth(onLoginSuccess) {
+export function initAuth(onLoginSuccess, onLogout = () => {}) {
   // Tab switching
   $('tab-login').addEventListener('click', () => {
     $('tab-login').classList.add('active');
@@ -201,6 +204,7 @@ export function initAuth(onLoginSuccess) {
   // Logout
   $('logout-btn').addEventListener('click', () => {
     clearSession();
+    onLogout();
     showAuth();
   });
 }
