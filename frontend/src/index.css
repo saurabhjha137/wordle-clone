@@ -1,0 +1,253 @@
+/* ═══════════════════════════════════════════════════════
+   WORDLE ELITE — Auth  Design Tokens
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700;800&display=swap');
+
+/* ── Default: Dark theme ── */
+:root {
+  --bg:           #0d1117;
+  --bg-2:         #161b22;
+  --bg-3:         #21262d;
+
+  --border:       #30363d;
+  --border-em:    #58a6ff44;
+
+  --text:         #e6edf3;
+  --text-2:       #8b949e;
+  --text-3:       #656d76;
+
+  --accent:       #58a6ff;
+  --accent-hover: #79b8ff;
+  --accent-dim:   rgba(88, 166, 255, 0.15);
+
+  --danger:       #f85149;
+  --warn:         #d29922;
+  --ok:           #3fb950;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  color-scheme: dark;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-theme="matrix"] {
+  --bg:        #000000;
+  --bg-2:      #050f05;
+  --bg-3:      #0a190a;
+  --border:    #00ff4166;
+  --border-em: #00ff41aa;
+  --text:      #00ff41;
+  --text-2:    #00cc33;
+  --text-3:    #009922;
+  --accent:        #00ff41;
+  --accent-hover:  #39ff14;
+  --accent-dim:    rgba(0, 255, 65, 0.22);
+}
+
+[data-theme="ocean"] {
+  --bg:        #0a192f;
+  --bg-2:      #112240;
+  --bg-3:      #1d3461;
+  --border:    #1d3461;
+  --border-em: #64ffda44;
+  --text:      #ccd6f6;
+  --text-2:    #8892b0;
+  --text-3:    #4a5568;
+  --accent:        #64ffda;
+  --accent-hover:  #a8ffee;
+  --accent-dim:    rgba(100, 255, 218, 0.12);
+}
+
+[data-theme="neon"] {
+  --bg:        #0c0014;
+  --bg-2:      #160020;
+  --bg-3:      #22003a;
+  --border:    #ff00ff22;
+  --border-em: #ff00ff44;
+  --text:      #f0e0ff;
+  --text-2:    #c080ff;
+  --text-3:    #8040aa;
+  --accent:        #cc44ff;
+  --accent-hover:  #ee88ff;
+  --accent-dim:    rgba(204, 68, 255, 0.15);
+}
+
+[data-theme="solar"] {
+  --bg:        #101418;
+  --bg-2:      #1b2228;
+  --bg-3:      #27313a;
+  --border:    #f7c94822;
+  --border-em: #f7c94855;
+  --text:      #fff8dc;
+  --text-2:    #cbbf8a;
+  --text-3:    #817750;
+  --accent:        #f7c948;
+  --accent-hover:  #ffe082;
+  --accent-dim:    rgba(247, 201, 72, 0.15);
+}
+
+[data-theme="ember"] {
+  --bg:        #120807;
+  --bg-2:      #21100c;
+  --bg-3:      #321a12;
+  --border:    #ff704322;
+  --border-em: #ff704355;
+  --text:      #ffe8dd;
+  --text-2:    #d4a090;
+  --text-3:    #8d6258;
+  --accent:        #ff7043;
+  --accent-hover:  #ffab91;
+  --accent-dim:    rgba(255, 112, 67, 0.15);
+}
+
+[data-theme="aurora"] {
+  --bg:        #071313;
+  --bg-2:      #0d2223;
+  --bg-3:      #153334;
+  --border:    #7cffa622;
+  --border-em: #7cffa655;
+  --text:      #e8fff2;
+  --text-2:    #9adbb8;
+  --text-3:    #5b8f73;
+  --accent:        #7cffa6;
+  --accent-hover:  #b8ffd0;
+  --accent-dim:    rgba(124, 255, 166, 0.13);
+}
+
+[data-theme="cyber"] {
+  --bg:        #070a14;
+  --bg-2:      #10152a;
+  --bg-3:      #171f3f;
+  --border:    #00d9ff22;
+  --border-em: #00d9ff55;
+  --text:      #e3fbff;
+  --text-2:    #8acbd8;
+  --text-3:    #4b7c86;
+  --accent:        #00d9ff;
+  --accent-hover:  #7defff;
+  --accent-dim:    rgba(0, 217, 255, 0.14);
+}
+
+[data-theme="crimson"] {
+  --bg:        #12070d;
+  --bg-2:      #21101a;
+  --bg-3:      #341725;
+  --border:    #ff477e22;
+  --border-em: #ff477e55;
+  --text:      #ffe7ef;
+  --text-2:    #d58aa3;
+  --text-3:    #8d5366;
+  --accent:        #ff477e;
+  --accent-hover:  #ff85ab;
+  --accent-dim:    rgba(255, 71, 126, 0.15);
+}
+
+[data-theme="gold"] {
+  --bg:        #0f0c07;
+  --bg-2:      #1e180e;
+  --bg-3:      #2f2616;
+  --border:    #d6a84f22;
+  --border-em: #d6a84f55;
+  --text:      #fff2d6;
+  --text-2:    #c9a66b;
+  --text-3:    #80683d;
+  --accent:        #d6a84f;
+  --accent-hover:  #ffd978;
+  --accent-dim:    rgba(214, 168, 79, 0.15);
+}
+
+[data-theme="frost"] {
+  --bg:        #071018;
+  --bg-2:      #0e1c2a;
+  --bg-3:      #172b3d;
+  --border:    #9be7ff22;
+  --border-em: #9be7ff55;
+  --text:      #effbff;
+  --text-2:    #a5cbd8;
+  --text-3:    #617f8c;
+  --accent:        #9be7ff;
+  --accent-hover:  #d1f6ff;
+  --accent-dim:    rgba(155, 231, 255, 0.13);
+}
+
+[data-theme="grape"] {
+  --bg:        #0e0714;
+  --bg-2:      #1a0f27;
+  --bg-3:      #28143c;
+  --border:    #a78bfa22;
+  --border-em: #a78bfa55;
+  --text:      #f3e8ff;
+  --text-2:    #c4a7e7;
+  --text-3:    #7b6099;
+  --accent:        #a78bfa;
+  --accent-hover:  #cdbdff;
+  --accent-dim:    rgba(167, 139, 250, 0.15);
+}
+
+[data-theme="mint"] {
+  --bg:        #06110e;
+  --bg-2:      #0c1f1a;
+  --bg-3:      #143229;
+  --border:    #34d39922;
+  --border-em: #34d39955;
+  --text:      #e9fff8;
+  --text-2:    #8fdabc;
+  --text-3:    #5b8c78;
+  --accent:        #34d399;
+  --accent-hover:  #86efac;
+  --accent-dim:    rgba(52, 211, 153, 0.14);
+}
+
+[data-theme="rose"] {
+  --bg:        #13080f;
+  --bg-2:      #23111d;
+  --bg-3:      #351b2b;
+  --border:    #fb718522;
+  --border-em: #fb718555;
+  --text:      #fff1f4;
+  --text-2:    #d99aa6;
+  --text-3:    #8f5d68;
+  --accent:        #fb7185;
+  --accent-hover:  #fda4af;
+  --accent-dim:    rgba(251, 113, 133, 0.15);
+}
+
+[data-theme="steel"] {
+  --bg:        #0b1116;
+  --bg-2:      #151d24;
+  --bg-3:      #202b34;
+  --border:    #94a3b822;
+  --border-em: #94a3b855;
+  --text:      #e5edf6;
+  --text-2:    #a6b4c5;
+  --text-3:    #64748b;
+  --accent:        #94a3b8;
+  --accent-hover:  #cbd5e1;
+  --accent-dim:    rgba(148, 163, 184, 0.15);
+}
+
+[data-theme="sunset"] {
+  --bg:        #130b13;
+  --bg-2:      #241423;
+  --bg-3:      #351d31;
+  --border:    #ff8a6522;
+  --border-em: #ff8a6555;
+  --text:      #fff0e8;
+  --text-2:    #d9a098;
+  --text-3:    #936360;
+  --accent:        #ff8a65;
+  --accent-hover:  #ffb199;
+  --accent-dim:    rgba(255, 138, 101, 0.15);
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { min-height: 100%; }
+body { background: #050913; color: var(--text); overflow-x: hidden; overflow-y: auto; }
+button { cursor: pointer; border: none; background: none; font-family: inherit; color: inherit; }
+input  { font-family: inherit; }

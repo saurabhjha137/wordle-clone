@@ -1,0 +1,161 @@
+/* ── Global Techfest cityscape — fixed behind every screen ── */
+.city-bg {
+  position: fixed;
+  inset: 0;
+  bottom: -15vh;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.city-sky {
+  position: absolute;
+  inset: 0;
+  background-position: 50%;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: blur(2px) brightness(0.55);
+  transform: scale(1.05);
+}
+
+.city-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgba(5,9,19,.72) 0%, rgba(5,9,19,.15) 40%, rgba(5,9,19,.5) 100%),
+    linear-gradient(to right,  rgba(5,9,19,.45), transparent 28%, transparent 72%, rgba(5,9,19,.45));
+  z-index: 4;
+}
+
+.city-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.city-bg-hyperspace,
+.city-bg-warp,
+.city-bg-cognizance {
+  bottom: 0;
+  background: #02030a;
+}
+
+.city-bg-hyperspace::after,
+.city-bg-warp::after,
+.city-bg-cognizance::after {
+  background:
+    radial-gradient(circle at 50% 46%, transparent 0%, rgba(0,0,0,.22) 54%, rgba(0,0,0,.72) 100%),
+    linear-gradient(to bottom, rgba(5,9,19,.35), rgba(5,9,19,.58));
+}
+
+.city-layer {
+  position: absolute;
+  display: flex;
+  width: 4000px;
+  height: auto;
+}
+.city-layer::before,
+.city-layer::after {
+  content: '';
+  display: block;
+  width: 2000px;
+  height: 100%;
+  background-image: inherit;
+  background-repeat: no-repeat;
+  background-size: 2000px 100%;
+}
+
+.city-back {
+  bottom: 265px;
+  z-index: 1;
+  height: 400px;
+  filter: blur(1.5px) brightness(.7);
+  animation: city-scroll 100s linear infinite;
+}
+.city-front {
+  bottom: 265px;
+  z-index: 3;
+  height: 350px;
+  filter: brightness(.75);
+  animation: city-scroll 22s linear infinite;
+}
+.city-shadow {
+  bottom: 10px;
+  z-index: 2;
+  height: 300px;
+  filter: blur(1px);
+  animation: city-scroll 3s linear infinite;
+}
+
+@keyframes city-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-2000px); }
+}
+
+.city-path {
+  position: absolute;
+  bottom: 170px;
+  z-index: 3;
+  width: 100vw;
+  height: 100px;
+  background: #b0b0b0;
+  box-shadow: 0 -10px 20px rgba(0,0,0,.4);
+  filter: blur(8px);
+  opacity: .55;
+}
+
+.city-car {
+  position: absolute;
+  left: 12%;
+  bottom: 200px;
+  z-index: 4;
+  width: 220px;
+  filter: blur(.6px) brightness(.8);
+}
+.city-car img { width: 100%; display: block; }
+
+@media (max-width: 760px) {
+  .city-bg {
+    bottom: -8vh;
+  }
+  .city-back {
+    bottom: 210px;
+    height: 320px;
+  }
+  .city-front {
+    bottom: 205px;
+    height: 285px;
+  }
+  .city-shadow {
+    bottom: 0;
+    height: 230px;
+  }
+  .city-path {
+    bottom: 135px;
+    height: 76px;
+  }
+  .city-car {
+    width: 140px;
+    left: 5%;
+    bottom: 158px;
+  }
+}
+
+@media (max-width: 420px) {
+  .city-back {
+    bottom: 185px;
+  }
+  .city-front {
+    bottom: 180px;
+  }
+  .city-path {
+    bottom: 112px;
+  }
+  .city-car {
+    width: 112px;
+    bottom: 132px;
+  }
+}

@@ -1,0 +1,36 @@
+# ── OS / editor ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo *.ntvs* *.njsproj *.sln *.sw?
+
+# ── Frontend ────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+frontend/*.local
+
+# ── Backend — Python ────────────────────────────────────────
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/.venv/
+backend/venv/
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# ── Backend — secrets & local state ─────────────────────────
+backend/local.settings.json
+backend/wordleee.db
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+
+# ── Azure Functions artefacts ────────────────────────────────
+backend/.python_packages/
+backend/host.json          # contains no secrets but is infra-specific; keep .example if needed
