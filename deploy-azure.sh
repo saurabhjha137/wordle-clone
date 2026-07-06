@@ -2,16 +2,14 @@
 # Deploy Wordle Elite (wordleee) to Azure
 #
 # Frontend  → Azure Blob Storage static website (wordleclonesaurabhjha137)
-# Backend   → Azure App Service Linux / Python 3.11  (new: wordleee-api)
+# Backend   → Azure Functions consumption plan  (wordleee-api)
+#             FastAPI is wrapped via AsgiFunctionApp — no VM quota needed.
 #
 # Prerequisites:
-#   az login   (Azure CLI authenticated)
-#   backend/.env  must exist and JWT_SECRET must be set
+#   az login          (Azure CLI authenticated)
+#   backend/.env      must exist with JWT_SECRET set
 #
-# Usage:
-#   ./deploy-azure.sh
-#
-# Resources created / updated in resource group: wordle-rg
+# Usage: ./deploy-azure.sh
 
 set -e
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -22,51 +20,47 @@ FRONTEND_DIR="$SCRIPT_DIR/frontend"
 ENV_FILE="$BACKEND_DIR/.env"
 
 RG="wordle-rg"
-LOCATION="eastus"
-STORAGE_ACCOUNT="wordleclonesaurabhjha137"
-APP_SERVICE_PLAN="wordleee-plan"   # Linux B1 plan created by this script
-WEBAPP_NAME="wordleee-api"
+LOCATION="eastus"           # storage account region
+FUNC_LOCATION="eastus2"    # separate region — eastus has Linux consumption plan conflicts
+STORAGE_ACCOUNT="wordleee"
+FUNC_APP="wordleee-api"
 SUBSCRIPTION=$(az account show --query id --output tsv)
 
 echo ""
 echo -e "${CYAN}==> Deploying Wordle Elite to Azure${NC}"
 echo "    Subscription    : $SUBSCRIPTION"
 echo "    Resource Group  : $RG"
-echo "    Storage Account : $STORAGE_ACCOUNT  (frontend)"
-echo "    App Service Plan: $APP_SERVICE_PLAN  (Linux B1)"
-echo "    Web App         : $WEBAPP_NAME       (backend FastAPI)"
+echo "    Storage Account : $STORAGE_ACCOUNT  (frontend + Functions runtime)"
+echo "    Function App    : $FUNC_APP          (backend FastAPI via ASGI)"
 echo ""
 
-# ── Preflight checks ───────────────────────────────────────────────────────
+# ── Preflight ─────────────────────────────────────────────────────────────
 if [ ! -f "$ENV_FILE" ]; then
-  echo -e "${RED}ERROR: $ENV_FILE not found.${NC}"
+  echo -e "${RED}ERROR: backend/.env not found.${NC}"
   echo "       cp backend/.env.example backend/.env  then set JWT_SECRET."
   exit 1
 fi
 
 JWT_SECRET=$(grep -E "^JWT_SECRET=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' | tr -d "'")
-if [ -z "$JWT_SECRET" ] || [ "$JWT_SECRET" = "REPLACE_ME_with_a_long_random_secret_at_least_32_chars" ]; then
+if [ -z "$JWT_SECRET" ] || echo "$JWT_SECRET" | grep -q "REPLACE_ME"; then
   echo -e "${RED}ERROR: JWT_SECRET is not set in backend/.env${NC}"
-  echo "       Generate one:  python3 -c \"import secrets; print(secrets.token_hex(32))\""
+  echo "       Generate one: python3 -c \"import secrets; print(secrets.token_hex(32))\""
   exit 1
 fi
 
-DATABASE_URL=$(grep -E "^DATABASE_URL=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' | tr -d "'" || echo "sqlite:///./wordleee.db")
 ROOT_USER=$(grep -E "^ROOT_USER=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' | tr -d "'" || echo "admin")
 
-# ── Step 1: Build frontend ─────────────────────────────────────────────────
+# ── [1/6] Build frontend ───────────────────────────────────────────────────
 echo "[1/6] Building frontend..."
+FUNC_URL="https://${FUNC_APP}.azurewebsites.net"
 cd "$FRONTEND_DIR"
-if [ ! -d node_modules ]; then
-  npm install --silent
-fi
-# Point API URL at the new App Service
-VITE_API_URL="https://${WEBAPP_NAME}.azurewebsites.net" npm run build
+[ ! -d node_modules ] && npm install --silent
+VITE_API_URL="$FUNC_URL" npm run build -- --logLevel silent
 echo -e "${GREEN}      Done.${NC}"
 cd "$SCRIPT_DIR"
 
-# ── Step 2: Upload frontend to blob storage ────────────────────────────────
-echo "[2/6] Enabling static website on storage account..."
+# ── [2/6] Enable static website + upload frontend ─────────────────────────
+echo "[2/6] Enabling static website..."
 az storage blob service-properties update \
   --account-name "$STORAGE_ACCOUNT" \
   --static-website \
@@ -87,32 +81,27 @@ az storage blob upload-batch \
   --output none
 echo -e "${GREEN}      Done.${NC}"
 
-# ── Step 3: Create App Service Plan (if needed) ───────────────────────────
-echo "[4/7] Creating App Service Plan (if needed)..."
-PLAN_EXISTS=$(az appservice plan list --resource-group "$RG" --query "[?name=='$APP_SERVICE_PLAN'] | length(@)" -o tsv 2>/dev/null || echo 0)
-if [ "${PLAN_EXISTS:-0}" -eq 0 ] 2>/dev/null; then
-  az appservice plan create \
-    --name "$APP_SERVICE_PLAN" \
-    --resource-group "$RG" \
-    --location "$LOCATION" \
-    --sku B1 \
-    --is-linux \
-    --subscription "$SUBSCRIPTION" \
-    --output none
-  echo -e "${GREEN}      Created ($APP_SERVICE_PLAN, Linux B1).${NC}"
-else
-  echo "      Already exists."
-fi
+FRONTEND_URL=$(az storage account show \
+  --name "$STORAGE_ACCOUNT" \
+  --resource-group "$RG" \
+  --query "primaryEndpoints.web" \
+  --output tsv | sed 's|/$||')
 
-# ── Step 4: Create / update App Service Web App ───────────────────────────
-echo "[5/7] Creating App Service Web App (if needed)..."
-EXISTS=$(az webapp list --resource-group "$RG" --query "[?name=='$WEBAPP_NAME'] | length(@)" -o tsv 2>/dev/null || echo 0)
+# ── [3/6] Create Function App (consumption plan — no VM quota needed) ──────
+echo "[4/6] Creating Function App (if needed)..."
+EXISTS=$(az functionapp list --resource-group "$RG" \
+  --query "[?name=='$FUNC_APP'] | length(@)" -o tsv 2>/dev/null || echo 0)
+
 if [ "${EXISTS:-0}" -eq 0 ] 2>/dev/null; then
-  az webapp create \
-    --name "$WEBAPP_NAME" \
+  az functionapp create \
+    --name "$FUNC_APP" \
     --resource-group "$RG" \
-    --plan "$APP_SERVICE_PLAN" \
-    --runtime "PYTHON:3.11" \
+    --storage-account "$STORAGE_ACCOUNT" \
+    --consumption-plan-location "$FUNC_LOCATION" \
+    --runtime python \
+    --runtime-version "3.12" \
+    --functions-version 4 \
+    --os-type Linux \
     --subscription "$SUBSCRIPTION" \
     --output none
   echo -e "${GREEN}      Created.${NC}"
@@ -120,78 +109,45 @@ else
   echo "      Already exists."
 fi
 
-# Set startup command and CORS
-az webapp config set \
-  --name "$WEBAPP_NAME" \
-  --resource-group "$RG" \
-  --startup-file "gunicorn -w 2 -k uvicorn.workers.UvicornWorker main:app" \
-  --output none
-
-FRONTEND_URL=$(az storage account show \
-  --name "$STORAGE_ACCOUNT" \
-  --resource-group "$RG" \
-  --query "primaryEndpoints.web" \
-  --output tsv | tr -d '/')
-
-az webapp cors add \
-  --name "$WEBAPP_NAME" \
-  --resource-group "$RG" \
-  --allowed-origins "$FRONTEND_URL" "http://localhost:5173" \
-  --output none 2>/dev/null || true
-
-# ── Step 5: Set environment variables ─────────────────────────────────────
-echo "[6/7] Setting environment variables..."
-az webapp config appsettings set \
-  --name "$WEBAPP_NAME" \
+# ── [4/6] Set app settings ─────────────────────────────────────────────────
+echo "[5/6] Setting environment variables..."
+az functionapp config appsettings set \
+  --name "$FUNC_APP" \
   --resource-group "$RG" \
   --settings \
     JWT_SECRET="$JWT_SECRET" \
-    DATABASE_URL="$DATABASE_URL" \
     ROOT_USER="$ROOT_USER" \
-    SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+    DATABASE_URL="sqlite:////tmp/wordleee.db" \
+    CORS_ORIGIN="$FRONTEND_URL" \
+    AzureWebJobsFeatureFlags="EnableWorkerIndexing" \
+    ENABLE_ORYX_BUILD="true" \
   --output none
 echo -e "${GREEN}      Done.${NC}"
 
-# ── Step 6: Zip deploy backend ─────────────────────────────────────────────
-echo "[7/7] Deploying FastAPI backend (zip deploy)..."
-cd "$BACKEND_DIR"
-
-# Build zip excluding venv, db, secrets
-zip -r /tmp/wordleee-backend.zip . \
-  --exclude ".venv/*" \
-  --exclude "*.db" \
-  --exclude "*.db-shm" \
-  --exclude "*.db-wal" \
-  --exclude ".env" \
-  --exclude "local.settings.json" \
-  --exclude "__pycache__/*" \
-  --exclude "*/__pycache__/*" \
-  > /dev/null
-
-az webapp deployment source config-zip \
-  --name "$WEBAPP_NAME" \
+# ── [5/6] Deploy backend via func CLI (installs packages on Azure) ─────────
+echo "[6/6] Deploying backend via func CLI..."
+# Clear Run-From-Package settings that conflict with func publish
+az functionapp config appsettings delete \
+  --name "$FUNC_APP" \
   --resource-group "$RG" \
-  --src /tmp/wordleee-backend.zip \
-  --output none
-rm /tmp/wordleee-backend.zip
+  --setting-names WEBSITE_RUN_FROM_PACKAGE WEBSITE_USE_ZIP \
+  --output none 2>/dev/null || true
+
+cd "$BACKEND_DIR"
+func azure functionapp publish "$FUNC_APP" --python
 echo -e "${GREEN}      Done.${NC}"
 cd "$SCRIPT_DIR"
 
 # ── Summary ────────────────────────────────────────────────────────────────
-WEBSITE_URL=$(az storage account show \
-  --name "$STORAGE_ACCOUNT" \
-  --resource-group "$RG" \
-  --query "primaryEndpoints.web" \
-  --output tsv)
-
 echo ""
 echo -e "${GREEN}==> Deploy complete!${NC}"
 echo ""
-echo -e "    Frontend  : ${CYAN}${WEBSITE_URL}${NC}"
-echo -e "    Backend   : ${CYAN}https://${WEBAPP_NAME}.azurewebsites.net${NC}"
-echo -e "    API Docs  : ${CYAN}https://${WEBAPP_NAME}.azurewebsites.net/docs${NC}"
+echo -e "    Frontend  : ${CYAN}${FRONTEND_URL}${NC}"
+echo -e "    Backend   : ${CYAN}${FUNC_URL}${NC}"
+echo -e "    API Docs  : ${CYAN}${FUNC_URL}/docs${NC}"
+echo -e "    Health    : ${CYAN}${FUNC_URL}/api/health${NC}"
 echo ""
-echo -e "${YELLOW}Note: SQLite DB lives on the App Service filesystem.${NC}"
-echo "      Data resets on each deploy / app restart."
+echo -e "${YELLOW}Note: SQLite lives in /tmp on the Function instance.${NC}"
+echo "      Data resets when the instance cold-starts."
 echo "      For persistence, swap DATABASE_URL to Azure SQL or Postgres."
 echo ""
