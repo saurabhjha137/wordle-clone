@@ -24,7 +24,7 @@ ENV_FILE="$BACKEND_DIR/.env"
 RG="wordle-rg"
 LOCATION="eastus"
 STORAGE_ACCOUNT="wordleclonesaurabhjha137"
-APP_SERVICE_PLAN="EastUSLinuxDynamicPlan"
+APP_SERVICE_PLAN="wordleee-plan"   # Linux B1 plan created by this script
 WEBAPP_NAME="wordleee-api"
 SUBSCRIPTION=$(az account show --query id --output tsv)
 
@@ -33,6 +33,7 @@ echo -e "${CYAN}==> Deploying Wordle Elite to Azure${NC}"
 echo "    Subscription    : $SUBSCRIPTION"
 echo "    Resource Group  : $RG"
 echo "    Storage Account : $STORAGE_ACCOUNT  (frontend)"
+echo "    App Service Plan: $APP_SERVICE_PLAN  (Linux B1)"
 echo "    Web App         : $WEBAPP_NAME       (backend FastAPI)"
 echo ""
 
@@ -86,10 +87,27 @@ az storage blob upload-batch \
   --output none
 echo -e "${GREEN}      Done.${NC}"
 
-# ── Step 3: Create / update App Service Web App ────────────────────────────
-echo "[4/6] Creating App Service Web App (if needed)..."
+# ── Step 3: Create App Service Plan (if needed) ───────────────────────────
+echo "[4/7] Creating App Service Plan (if needed)..."
+PLAN_EXISTS=$(az appservice plan list --resource-group "$RG" --query "[?name=='$APP_SERVICE_PLAN'] | length(@)" -o tsv 2>/dev/null || echo 0)
+if [ "${PLAN_EXISTS:-0}" -eq 0 ] 2>/dev/null; then
+  az appservice plan create \
+    --name "$APP_SERVICE_PLAN" \
+    --resource-group "$RG" \
+    --location "$LOCATION" \
+    --sku B1 \
+    --is-linux \
+    --subscription "$SUBSCRIPTION" \
+    --output none
+  echo -e "${GREEN}      Created ($APP_SERVICE_PLAN, Linux B1).${NC}"
+else
+  echo "      Already exists."
+fi
+
+# ── Step 4: Create / update App Service Web App ───────────────────────────
+echo "[5/7] Creating App Service Web App (if needed)..."
 EXISTS=$(az webapp list --resource-group "$RG" --query "[?name=='$WEBAPP_NAME'] | length(@)" -o tsv 2>/dev/null || echo 0)
-if [ "$EXISTS" -eq 0 ] 2>/dev/null; then
+if [ "${EXISTS:-0}" -eq 0 ] 2>/dev/null; then
   az webapp create \
     --name "$WEBAPP_NAME" \
     --resource-group "$RG" \
@@ -121,8 +139,8 @@ az webapp cors add \
   --allowed-origins "$FRONTEND_URL" "http://localhost:5173" \
   --output none 2>/dev/null || true
 
-# ── Step 4: Set environment variables ─────────────────────────────────────
-echo "[5/6] Setting environment variables..."
+# ── Step 5: Set environment variables ─────────────────────────────────────
+echo "[6/7] Setting environment variables..."
 az webapp config appsettings set \
   --name "$WEBAPP_NAME" \
   --resource-group "$RG" \
@@ -134,8 +152,8 @@ az webapp config appsettings set \
   --output none
 echo -e "${GREEN}      Done.${NC}"
 
-# ── Step 5: Zip deploy backend ─────────────────────────────────────────────
-echo "[6/6] Deploying FastAPI backend (zip deploy)..."
+# ── Step 6: Zip deploy backend ─────────────────────────────────────────────
+echo "[7/7] Deploying FastAPI backend (zip deploy)..."
 cd "$BACKEND_DIR"
 
 # Build zip excluding venv, db, secrets
