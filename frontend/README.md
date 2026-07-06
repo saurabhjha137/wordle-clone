@@ -61,7 +61,7 @@ npm run lint
 ## Project Structure
 
 ```text
-wordle-auth/
+wordleee/frontend/
   public/
     favicon.svg
     icons.svg
