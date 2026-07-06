@@ -124,6 +124,15 @@ az functionapp config appsettings set \
   --output none
 echo -e "${GREEN}      Done.${NC}"
 
+# Azure Functions intercepts OPTIONS preflights before FastAPI sees them,
+# so CORS must also be registered at the platform level.
+az functionapp cors add --name "$FUNC_APP" --resource-group "$RG" \
+  --allowed-origins "$FRONTEND_URL" --output none 2>/dev/null || true
+az functionapp cors add --name "$FUNC_APP" --resource-group "$RG" \
+  --allowed-origins "http://localhost:5173" --output none 2>/dev/null || true
+az functionapp cors add --name "$FUNC_APP" --resource-group "$RG" \
+  --allowed-origins "http://127.0.0.1:5173" --output none 2>/dev/null || true
+
 # ── [5/6] Deploy backend via func CLI (installs packages on Azure) ─────────
 echo "[6/6] Deploying backend via func CLI..."
 # Clear Run-From-Package settings that conflict with func publish
