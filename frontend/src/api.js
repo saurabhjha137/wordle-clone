@@ -31,6 +31,16 @@ async function request(path, options = {}) {
       _authErrorListeners.forEach(fn => fn())
     }
     const detail = data.detail
+    // Pydantic v2 returns an array of {loc, msg, type} objects for validation errors
+    if (Array.isArray(detail)) {
+      const fields = {}
+      detail.forEach(err => {
+        const field = err.loc?.[err.loc.length - 1]
+        if (field) fields[field] = err.msg.replace(/^Value error, /, '')
+      })
+      if (Object.keys(fields).length) throw { fields }
+      throw new Error(detail[0]?.msg ?? `Request failed (${res.status})`)
+    }
     if (detail && typeof detail === 'object') throw { fields: detail }
     throw new Error(typeof detail === 'string' ? detail : `Request failed (${res.status})`)
   }

@@ -44,15 +44,16 @@ const validate = {
     return ''
   },
   password: v => {
-    if (!v)          return 'Password is required'
+    if (!v)           return 'Password is required'
     if (v.length < 8) return 'At least 8 characters'
-    if (!/[a-zA-Z]/.test(v)) return 'Include at least one letter'
-    if (!/[0-9]/.test(v))    return 'Include at least one number'
+    if (!/[a-zA-Z]/.test(v))          return 'Include at least one letter'
+    if (!/[0-9]/.test(v))             return 'Include at least one number'
+    if (!/[^a-zA-Z0-9]/.test(v))     return 'Include at least one special character (e.g. !@#$)'
     return ''
   },
   recoveryAnswer: v => {
     if (!v.trim()) return 'Recovery answer is required'
-    if (v.trim().length < 6) return 'At least 6 characters'
+    if (v.trim().length < 2) return 'At least 2 characters'
     return ''
   },
 }
@@ -115,7 +116,7 @@ function pwStrength(pw) {
   let s = 0
   if (pw.length >= 8)                               s++
   if (/[a-zA-Z]/.test(pw) && /[0-9]/.test(pw))    s++
-  if (pw.length >= 12)                              s++
+  if (/[^a-zA-Z0-9]/.test(pw))                     s++
   return s  // 0–3
 }
 
@@ -318,7 +319,7 @@ function RegisterForm({ onSuccess, onSwitchToLogin }) {
         <label className="auth-label">Password</label>
         <PasswordInput
           className={`auth-input${errors.password ? ' err' : form.password ? ' ok' : ''}`}
-          autoComplete="new-password" placeholder="••••••••"
+          autoComplete="new-password" placeholder="Min 8 chars + letter + number + symbol"
           value={form.password} onChange={e => set('password', e.target.value)}
         />
         <StrengthBar password={form.password} />
