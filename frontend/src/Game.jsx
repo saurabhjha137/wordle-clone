@@ -207,17 +207,20 @@ function Keyboard({ letterStates, onKey }) {
 }
 
 /* ── Result overlay ─────────────────────────────────────── */
-function ResultOverlay({ status, target, onRetry, onLobby }) {
+function ResultOverlay({ status, target, onRetry, onLobby, roomGame }) {
   const won = status === 'won'
   return (
     <div className="result-overlay">
       <div className="result-card">
         <div className={`result-icon${won ? ' won' : ' lost'}`}>{won ? '🏆' : '💀'}</div>
         <h2 className="result-heading">{won ? 'Brilliant!' : 'Game Over'}</h2>
+        {roomGame && (
+          <p className="result-challenge-tag">⚔️ Challenge by {roomGame.createdBy}</p>
+        )}
         <p className="result-sub">{won ? 'You cracked the code!' : 'The word was'}</p>
         {!won && <p className="result-word">{target}</p>}
         <div className="result-actions">
-          <button className="result-btn primary" onClick={onRetry}>Play Again</button>
+          {!roomGame && <button className="result-btn primary" onClick={onRetry}>Play Again</button>}
           <button className="result-btn secondary" onClick={onLobby}>← Lobby</button>
         </div>
       </div>
@@ -253,31 +256,37 @@ function LoadingOverlay({ status, onRetry, onLobby }) {
 }
 
 /* ── Game (root) ────────────────────────────────────────── */
-export default function Game({ wordLen = 5, onBack }) {
-  const maxAttempts = ATTEMPTS_FOR_LEN[wordLen] ?? 6
-  const totalTime   = TIME_FOR_LEN[wordLen] ?? 150
+export default function Game({ wordLen = 5, onBack, roomGame = null }) {
+  const effectiveLen = roomGame?.wordLength ?? wordLen
+  const maxAttempts  = ATTEMPTS_FOR_LEN[effectiveLen] ?? 6
+  const totalTime    = roomGame?.timeLimit ?? TIME_FOR_LEN[effectiveLen] ?? 150
 
-  const [state, dispatch]  = useReducer(gameReducer, { wordLen, maxAttempts }, createInitialGameState)
+  const [state, dispatch]  = useReducer(gameReducer, { wordLen: effectiveLen, maxAttempts }, createInitialGameState)
   const [timeLeft, setTime] = useState(totalTime)
 
-  /* Fetch word whenever status enters 'loading' (on mount + retry) */
+  /* Set word: skip API fetch for room challenges — word already known from invite join */
   useEffect(() => {
     if (state.status !== 'loading') return
+    if (roomGame) {
+      dispatch({ type: 'SET_TARGET', target: roomGame.word })
+      return
+    }
     let cancelled = false
-    apiGetWord(wordLen)
+    apiGetWord(effectiveLen)
       .then(word  => { if (!cancelled) dispatch({ type: 'SET_TARGET', target: word }) })
       .catch(()   => { if (!cancelled) dispatch({ type: 'FETCH_ERROR' }) })
     return () => { cancelled = true }
-  }, [state.status, wordLen])
+  }, [state.status, effectiveLen, roomGame])
 
   /* Submit result to backend when the game ends */
   useEffect(() => {
     if (state.status !== 'won' && state.status !== 'lost') return
     apiSubmitGame({
-      wordLength : wordLen,
+      wordLength : effectiveLen,
       guesses    : state.guesses.length,
       won        : state.status === 'won',
       timeTaken  : totalTime - timeLeft,
+      roomId     : roomGame?.roomId ?? null,
     }).catch(() => {})
   }, [state.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -312,7 +321,7 @@ export default function Game({ wordLen = 5, onBack }) {
   const letterStates = getLetterStates(state.guesses, state.target)
 
   const handleRetry = () => {
-    dispatch({ type: 'RESET', wordLen, maxAttempts })
+    dispatch({ type: 'RESET', wordLen: effectiveLen, maxAttempts })
     setTime(totalTime)
   }
 
@@ -335,7 +344,8 @@ export default function Game({ wordLen = 5, onBack }) {
         </div>
 
         <div className="game-badge">
-          <span className="badge-len">{wordLen}L</span>
+          {roomGame && <span className="badge-room">⚔️ VS</span>}
+          <span className="badge-len">{effectiveLen}L</span>
           <span className="badge-sep">·</span>
           <span className="badge-tries">{maxAttempts} tries</span>
         </div>
@@ -346,7 +356,7 @@ export default function Game({ wordLen = 5, onBack }) {
         <TechClock total={totalTime} left={timeLeft} />
 
         <Grid
-          wordLen={wordLen}
+          wordLen={effectiveLen}
           maxAttempts={maxAttempts}
           guesses={state.guesses}
           current={state.current}
@@ -366,6 +376,7 @@ export default function Game({ wordLen = 5, onBack }) {
           target={state.target}
           onRetry={handleRetry}
           onLobby={onBack}
+          roomGame={roomGame}
         />
       )}
     </div>

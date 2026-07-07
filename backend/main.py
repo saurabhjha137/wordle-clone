@@ -7,6 +7,8 @@ Startup sequence
    intentionally left out of cross-origin access.
 3. Register all domain routers with their prefixes.
 """
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -27,14 +29,20 @@ app = FastAPI(
     version     = "1.0.0",
 )
 
+_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+]
+# CORS_ORIGIN env var lets the deploy script inject the production frontend URL
+# e.g. https://wordleclonesaurabhjha137.z13.web.core.windows.net
+if _extra := os.getenv("CORS_ORIGIN"):
+    _CORS_ORIGINS.append(_extra.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins     = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4173",
-        "http://127.0.0.1:4173",
-    ],
+    allow_origins     = _CORS_ORIGINS,
     allow_credentials = True,
     allow_methods     = ["*"],
     allow_headers     = ["*"],

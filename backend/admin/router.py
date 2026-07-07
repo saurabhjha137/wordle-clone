@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from dependencies import require_admin
 from models import AuthActivity, User
-from schemas import MessageResponse, SetAdminRequest
+from schemas import MessageResponse, SetAdminRequest, UserSummary
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -52,6 +52,25 @@ def show_all_user_data(
         })
 
     return {"total": len(result), "users": result}
+
+
+@router.get(
+    "/users",
+    response_model=dict,
+    summary="List all registered users (admin only, for room player picker)",
+)
+def list_users(
+    db   : Session = Depends(get_db),
+    admin: User    = Depends(require_admin),
+):
+    users = db.query(User).order_by(User.username).all()
+    return {
+        "users": [
+            {"username": u.username}
+            for u in users
+            if u.username != admin.username
+        ]
+    }
 
 
 @router.post(

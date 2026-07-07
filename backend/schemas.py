@@ -164,10 +164,12 @@ class SubmitGameResponse(BaseModel):
 # ── Room ──────────────────────────────────────────────────────────────────
 
 class CreateRoomRequest(BaseModel):
-    name        : str = Field(..., min_length=3, max_length=40)
-    word_length : int = Field(..., ge=3, le=7)
-    time_limit  : int
-    max_players : int = Field(default=10, ge=2, le=20)
+    name              : str       = Field(..., min_length=3, max_length=40)
+    word_length       : int       = Field(..., ge=3, le=7)
+    time_limit        : int
+    max_players       : int       = Field(default=10, ge=2, le=20)
+    word              : str       = Field(..., description="Plaintext word set by admin")
+    invited_usernames : list[str] = Field(default_factory=list, description="Usernames to invite")
 
     @field_validator("word_length")
     @classmethod
@@ -182,6 +184,20 @@ class CreateRoomRequest(BaseModel):
         if v not in VALID_TIME_LIMITS:
             raise ValueError(f"time_limit must be one of {sorted(VALID_TIME_LIMITS)} seconds.")
         return v
+
+    @field_validator("word")
+    @classmethod
+    def normalize_word(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not v.isalpha():
+            raise ValueError("Word must contain only letters A–Z.")
+        return v
+
+    @model_validator(mode="after")
+    def word_matches_length(self) -> "CreateRoomRequest":
+        if len(self.word) != self.word_length:
+            raise ValueError(f"Word must be exactly {self.word_length} letters long.")
+        return self
 
 
 class ParticipantInfo(BaseModel):
@@ -210,6 +226,33 @@ class RoomResultRequest(BaseModel):
     guesses    : int  = Field(..., ge=1, le=8)
     won        : bool
     time_taken : int  = Field(..., ge=0)
+
+
+class JoinRoomResponse(BaseModel):
+    message     : str
+    cipher_word : str
+    time_limit  : int
+    word_length : int
+    created_by  : str
+    room_name   : str
+    room_id     : str
+
+
+class InviteItem(BaseModel):
+    room_id     : str
+    room_name   : str
+    word_length : int
+    time_limit  : int
+    created_by  : str
+    player_count: int
+
+
+class InvitesResponse(BaseModel):
+    invites: list[InviteItem]
+
+
+class UserSummary(BaseModel):
+    username: str
 
 
 # ── Leaderboard ───────────────────────────────────────────────────────────

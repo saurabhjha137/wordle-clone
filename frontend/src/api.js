@@ -126,15 +126,48 @@ export async function apiGetMyStats() {
 
 /* ── Room endpoints ─────────────────────────────────────── */
 
-export async function apiCreateRoom({ name, wordLength, timeLimit, maxPlayers }) {
+export async function apiCreateRoom({ name, wordLength, timeLimit, maxPlayers, word, invitedUsernames }) {
   return request('/api/rooms', {
     method : 'POST',
     headers: authHeaders(),
     body   : JSON.stringify({
       name,
-      word_length : wordLength,
-      time_limit  : timeLimit,
-      max_players : maxPlayers,
+      word_length        : wordLength,
+      time_limit         : timeLimit,
+      max_players        : maxPlayers,
+      word,
+      invited_usernames  : invitedUsernames,
     }),
   })
+}
+
+export async function apiGetInvites() {
+  return request('/api/rooms/invites', { headers: authHeaders() })
+}
+
+export async function apiJoinRoom(roomId) {
+  const data = await request(`/api/rooms/${roomId}/join`, {
+    method : 'POST',
+    headers: authHeaders(),
+  })
+  // Decipher the word client-side (same XOR key as apiGetWord)
+  const word = atob(data.cipher_word)
+    .split('')
+    .map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ CIPHER_KEY[i % 4]))
+    .join('')
+    .toUpperCase()
+  return {
+    word,
+    timeLimit : data.time_limit,
+    wordLength: data.word_length,
+    createdBy : data.created_by,
+    roomName  : data.room_name,
+    roomId    : data.room_id,
+  }
+}
+
+/* ── Admin endpoints ────────────────────────────────────── */
+
+export async function apiGetUsers() {
+  return request('/api/admin/users', { headers: authHeaders() })
 }

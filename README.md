@@ -184,12 +184,12 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    A[GET /api/leaderboard\n?word_length=5&sort_by=best_time] --> B{word_length param?}
-    B -- Yes --> C[Query user_stats_by_length\nWHERE word_length = N]
-    B -- No --> D[Query user_stats\nglobal all-lengths]
-    C --> E[ORDER BY sort_by\nwins / win_pct / best_time / played / streak]
+    A["GET /api/leaderboard<br/>word_length=5 and sort_by=best_time"] --> B{"word_length param?"}
+    B -- Yes --> C["Query user_stats_by_length<br/>WHERE word_length = N"]
+    B -- No --> D["Query user_stats<br/>global all-lengths"]
+    C --> E["ORDER BY sort_by<br/>wins / win_pct / best_time / played / streak"]
     D --> E
-    E --> F[Return ranked list\n{rank, username, played, won, win_pct,\nstreak, max_streak, best_time}]
+    E --> F["Return ranked list<br/>rank, username, played, won, win_pct,<br/>streak, max_streak, best_time"]
 ```
 
 ---

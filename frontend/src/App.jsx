@@ -3,6 +3,7 @@ import Lobby  from './Lobby'
 import Game   from './Game'
 import CityBg from './CityBg'
 import { apiLogin, apiRegister, apiResetPassword, clearToken, getToken, onAuthError } from './api'
+// roomGame shape: { word, timeLimit, wordLength, createdBy, roomName, roomId } | null
 import './App.css'
 
 const STORAGE_KEYS = {
@@ -583,6 +584,7 @@ export default function App() {
   const [user, setUser] = useState(getSavedUser)
   const [screen, setScreen] = useState(() => isLoggedIn() ? 'lobby' : 'auth')
   const [wordLen, setWordLen] = useState(DEFAULT_WORD_LENGTH)
+  const [roomGame, setRoomGame] = useState(null) // { word, timeLimit, wordLength, createdBy, roomName, roomId }
 
   const handleLogin = (u) => {
     setUser(u)
@@ -591,21 +593,29 @@ export default function App() {
   const handleLogout = () => {
     clearSavedUser()
     setUser(null)
+    setRoomGame(null)
     setScreen('auth')
+  }
+  const handleStartGame = (len) => {
+    setRoomGame(null)
+    setWordLen(len)
+    setScreen('game')
+  }
+  const handleJoinRoom = (roomData) => {
+    setRoomGame(roomData)
+    setWordLen(roomData.wordLength)
+    setScreen('game')
   }
 
   // Auto-logout when any API call gets a 401 (expired/revoked token)
   useEffect(() => {
     onAuthError(() => {
       setUser(null)
+      setRoomGame(null)
       setScreen('auth')
       setTab(AUTH_TABS.login)
     })
   }, [])
-  const handleStartGame = (len) => {
-    setWordLen(len)
-    setScreen('game')
-  }
   const renderWithBackground = content => (
     <>
       <CityBg variant={background} />
@@ -615,12 +625,25 @@ export default function App() {
 
   /* — Lobby ─ */
   if (screen === 'lobby') {
-    return renderWithBackground(<Lobby user={user} onStartGame={handleStartGame} onLogout={handleLogout} />)
+    return renderWithBackground(
+      <Lobby
+        user={user}
+        onStartGame={handleStartGame}
+        onJoinRoom={handleJoinRoom}
+        onLogout={handleLogout}
+      />
+    )
   }
 
   /* — Game ─ */
   if (screen === 'game') {
-    return renderWithBackground(<Game wordLen={wordLen} onBack={() => setScreen('lobby')} />)
+    return renderWithBackground(
+      <Game
+        wordLen={wordLen}
+        onBack={() => { setScreen('lobby'); setRoomGame(null) }}
+        roomGame={roomGame}
+      />
+    )
   }
 
   /* — Auth page ─ */

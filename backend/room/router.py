@@ -6,6 +6,8 @@ from dependencies import get_current_user, require_admin
 from models import User
 from schemas import (
     CreateRoomRequest,
+    InvitesResponse,
+    JoinRoomResponse,
     MessageResponse,
     RoomDetailResponse,
     RoomResponse,
@@ -42,14 +44,30 @@ def create_room(
     admin: User    = Depends(require_admin),
 ):
     room = service.create_room(
-        db          = db,
-        admin       = admin,
-        name        = body.name,
-        word_length = body.word_length,
-        time_limit  = body.time_limit,
-        max_players = body.max_players,
+        db                = db,
+        admin             = admin,
+        name              = body.name,
+        word_length       = body.word_length,
+        time_limit        = body.time_limit,
+        max_players       = body.max_players,
+        word              = body.word,
+        invited_usernames = body.invited_usernames,
     )
-    return {**_to_room_response(room), "cipher_word": None, "participants": []}
+    participants = [{"username": p.user.username, "status": p.status} for p in room.participants]
+    return {**_to_room_response(room), "cipher_word": None, "participants": participants}
+
+
+@router.get(
+    "/invites",
+    response_model=InvitesResponse,
+    summary="Get pending room invites for the current user",
+)
+def get_invites(
+    db  : Session = Depends(get_db),
+    user: User    = Depends(get_current_user),
+):
+    invites = service.get_invites(db, user)
+    return {"invites": invites}
 
 
 @router.get(
@@ -77,10 +95,7 @@ def get_room(
 ):
     room = service.get_room_or_404(db, room_id)
     is_participant = any(p.user_id == user.id for p in room.participants)
-
-    # Only reveal the cipher word to participants of an active room
     cipher = room.cipher_word if (room.status == "active" and is_participant) else None
-
     participants = [
         {"username": p.user.username, "status": p.status}
         for p in room.participants
@@ -90,17 +105,25 @@ def get_room(
 
 @router.post(
     "/{room_id}/join",
-    response_model=MessageResponse,
-    summary="Join a room",
+    response_model=JoinRoomResponse,
+    summary="Accept a room invite",
 )
 def join_room(
     room_id: str,
     db     : Session = Depends(get_db),
     user   : User    = Depends(get_current_user),
 ):
-    room = service.get_room_or_404(db, room_id)
-    service.join_room(db=db, room=room, user=user)
-    return {"message": f"Joined room '{room.name}'."}
+    room        = service.get_room_or_404(db, room_id)
+    cipher_word = service.join_room(db=db, room=room, user=user)
+    return {
+        "message"    : f"Joined room '{room.name}'.",
+        "cipher_word": cipher_word,
+        "time_limit" : room.time_limit,
+        "word_length": room.word_length,
+        "created_by" : room.created_by_user.username,
+        "room_name"  : room.name,
+        "room_id"    : room.id,
+    }
 
 
 @router.post(

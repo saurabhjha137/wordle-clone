@@ -1,6 +1,18 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import './Lobby.css'
-import { apiCreateRoom, apiGetLeaderboard, apiGetMyStats } from './api'
+import { apiCreateRoom, apiGetInvites, apiGetLeaderboard, apiGetMyStats, apiGetUsers, apiJoinRoom } from './api'
+
+const INVITE_HANDLED_KEY = 'wordleee_handled_invites'
+const POLL_MS            = 10_000
+
+function getHandledInvites() {
+  try { return JSON.parse(localStorage.getItem(INVITE_HANDLED_KEY) || '{}') } catch { return {} }
+}
+function markInviteHandled(roomId) {
+  const s = getHandledInvites(); s[roomId] = true
+  localStorage.setItem(INVITE_HANDLED_KEY, JSON.stringify(s))
+}
+function isInviteHandled(roomId) { return !!getHandledInvites()[roomId] }
 
 /* ── static config ── */
 const MODES = [
@@ -43,18 +55,244 @@ function getModeByLength(wordLength) {
   return MODES.find(mode => mode.len === wordLength) ?? MODES[2]
 }
 
+/* ── CreateRoomModal ── */
+function CreateRoomModal({ wordLength, user, onClose, onCreated }) {
+  const [letters,   setLetters]   = useState(Array(wordLength).fill(''))
+  const [users,     setUsers]     = useState([])
+  const [selected,  setSelected]  = useState(new Set())
+  const [loading,   setLoading]   = useState(false)
+  const [usersLoad, setUsersLoad] = useState(true)
+  const [error,     setError]     = useState('')
+  const inputRefs = useRef([])
+
+  useEffect(() => {
+    setUsersLoad(true)
+    apiGetUsers()
+      .then(data => setUsers(data.users ?? []))
+      .catch(() => setUsers([]))
+      .finally(() => setUsersLoad(false))
+  }, [])
+
+  // Reset letters when wordLength changes (shouldn't happen inside modal but defensive)
+  useEffect(() => {
+    setLetters(Array(wordLength).fill(''))
+  }, [wordLength])
+
+  const handleLetterKey = (idx, e) => {
+    const ch = e.key.toUpperCase()
+    if (ch === 'BACKSPACE') {
+      if (letters[idx]) {
+        const next = [...letters]; next[idx] = ''
+        setLetters(next)
+      } else if (idx > 0) {
+        inputRefs.current[idx - 1]?.focus()
+      }
+      return
+    }
+    if (ch === 'ARROWLEFT' && idx > 0) { inputRefs.current[idx - 1]?.focus(); return }
+    if (ch === 'ARROWRIGHT' && idx < wordLength - 1) { inputRefs.current[idx + 1]?.focus(); return }
+    if (!/^[A-Z]$/.test(ch)) return
+    const next = [...letters]; next[idx] = ch
+    setLetters(next)
+    if (idx < wordLength - 1) inputRefs.current[idx + 1]?.focus()
+  }
+
+  const toggleUser = (username) => {
+    setSelected(prev => {
+      const n = new Set(prev)
+      n.has(username) ? n.delete(username) : n.add(username)
+      return n
+    })
+  }
+
+  const word      = letters.join('')
+  const wordReady = word.length === wordLength && /^[A-Z]+$/.test(word)
+  const canCreate = wordReady && selected.size > 0 && !loading
+
+  const handleCreate = async () => {
+    if (!canCreate) return
+    setLoading(true); setError('')
+    try {
+      const room = await apiCreateRoom({
+        name             : `${user?.username ?? 'Admin'}'s ${wordLength}-Letter Room`,
+        wordLength,
+        timeLimit        : ROOM_TIME_FOR_LEN[wordLength],
+        maxPlayers       : Math.max(DEFAULT_MAX_PLAYERS, selected.size + 1),
+        word,
+        invitedUsernames : [...selected],
+      })
+      onCreated(room)
+    } catch (err) {
+      setError(err.message ?? 'Failed to create room.')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box">
+        <div className="modal-header">
+          <span className="modal-title">Create Room · {wordLength} Letters</span>
+          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        <div className="modal-section">
+          <p className="modal-label">Enter the secret word ({wordLength} letters)</p>
+          <div className="word-input-row">
+            {letters.map((ch, i) => (
+              <input
+                key={i}
+                ref={el => inputRefs.current[i] = el}
+                className={`word-letter-box${ch ? ' filled' : ''}`}
+                value={ch}
+                readOnly
+                onKeyDown={e => handleLetterKey(i, e)}
+                onFocus={() => {}}
+                tabIndex={0}
+                maxLength={1}
+                aria-label={`Letter ${i + 1}`}
+              />
+            ))}
+          </div>
+          {wordReady && (
+            <p className="modal-hint valid">Word set: {word}</p>
+          )}
+        </div>
+
+        <div className="modal-section">
+          <p className="modal-label">
+            Challenge players{' '}
+            {selected.size > 0 && <span className="selected-count">{selected.size} selected</span>}
+          </p>
+          {usersLoad ? (
+            <p className="modal-hint">Loading players…</p>
+          ) : users.length === 0 ? (
+            <p className="modal-hint">No other players registered yet.</p>
+          ) : (
+            <div className="player-list">
+              {users.map(u => (
+                <label key={u.username} className={`player-row${selected.has(u.username) ? ' picked' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(u.username)}
+                    onChange={() => toggleUser(u.username)}
+                  />
+                  <span className="player-avatar">{u.username[0].toUpperCase()}</span>
+                  <span className="player-name">{u.username}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {error && <p className="modal-error">{error}</p>}
+
+        <div className="modal-footer">
+          <button className="modal-btn-cancel" onClick={onClose} disabled={loading}>Cancel</button>
+          <button className="modal-btn-create" onClick={handleCreate} disabled={!canCreate}>
+            {loading ? 'Creating…' : `Challenge ${selected.size > 0 ? selected.size : ''} Player${selected.size !== 1 ? 's' : ''} ⚔️`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── InviteToast ── */
+function InviteToast({ invite, onDismiss, onJoin }) {
+  const [joining, setJoining] = useState(false)
+
+  const handleJoin = async () => {
+    setJoining(true)
+    try {
+      const roomData = await apiJoinRoom(invite.room_id)
+      onJoin(roomData)
+    } catch (err) {
+      setJoining(false)
+      alert(err.message ?? 'Failed to join room.')
+    }
+  }
+
+  return (
+    <div className="invite-toast">
+      <div className="invite-toast-body">
+        <span className="invite-icon">⚔️</span>
+        <div className="invite-text">
+          <strong>{invite.created_by}</strong> challenged you!
+          <span className="invite-meta">
+            {invite.room_name} · {invite.word_length}L
+          </span>
+        </div>
+      </div>
+      <div className="invite-actions">
+        <button className="invite-dismiss" onClick={onDismiss}>Dismiss</button>
+        <button className="invite-join" onClick={handleJoin} disabled={joining}>
+          {joining ? 'Joining…' : 'Join Game →'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ── InvitePoller ── */
+function InvitePoller({ user, onJoinRoom }) {
+  const [pending, setPending] = useState([])
+
+  const poll = useCallback(() => {
+    if (!user) return
+    apiGetInvites()
+      .then(data => {
+        const fresh = (data.invites ?? []).filter(inv => !isInviteHandled(inv.room_id))
+        setPending(fresh)
+      })
+      .catch(() => {})
+  }, [user])
+
+  useEffect(() => {
+    poll()
+    const id = setInterval(poll, POLL_MS)
+    return () => clearInterval(id)
+  }, [poll])
+
+  const dismiss = (roomId) => {
+    markInviteHandled(roomId)
+    setPending(prev => prev.filter(i => i.room_id !== roomId))
+  }
+
+  const join = (roomId, roomData) => {
+    markInviteHandled(roomId)
+    setPending(prev => prev.filter(i => i.room_id !== roomId))
+    onJoinRoom(roomData)
+  }
+
+  if (!pending.length) return null
+
+  return (
+    <div className="invite-stack">
+      {pending.map(inv => (
+        <InviteToast
+          key={inv.room_id}
+          invite={inv}
+          onDismiss={() => dismiss(inv.room_id)}
+          onJoin={roomData => join(inv.room_id, roomData)}
+        />
+      ))}
+    </div>
+  )
+}
+
 /* ── Lobby ── */
-export default function Lobby({ user, onStartGame, onLogout }) {
+export default function Lobby({ user, onStartGame, onLogout, onJoinRoom }) {
   const [selected,  setSelected]  = useState(5)
   const [lbData,    setLbData]    = useState(null)
   const [myStats,   setMyStats]   = useState(null)
   const [loading,   setLoading]   = useState(true)
   const [lbLoading, setLbLoading] = useState(false)
-  const [lbLen,     setLbLen]     = useState(null)   // null = All
+  const [lbLen,     setLbLen]     = useState(null)
   const [lbSort,    setLbSort]    = useState('wins')
-  const [roomState, setRoomState] = useState({ loading: false, message: '', error: '' })
+  const [showModal, setShowModal] = useState(false)
+  const [roomMsg,   setRoomMsg]   = useState('')
 
-  // Initial load: leaderboard + my stats
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -69,7 +307,6 @@ export default function Lobby({ user, onStartGame, onLogout }) {
     return () => { cancelled = true }
   }, [])
 
-  // Re-fetch leaderboard when filter/sort changes (skip on initial mount)
   const fetchLeaderboard = useCallback((len, sort) => {
     setLbLoading(true)
     apiGetLeaderboard(10, len, sort)
@@ -78,47 +315,34 @@ export default function Lobby({ user, onStartGame, onLogout }) {
       .finally(() => setLbLoading(false))
   }, [])
 
-  const handleLbLen = (val) => {
-    setLbLen(val)
-    fetchLeaderboard(val, lbSort)
-  }
+  const handleLbLen = (val) => { setLbLen(val); fetchLeaderboard(val, lbSort) }
+  const handleLbSort = (val) => { setLbSort(val); fetchLeaderboard(lbLen, val) }
 
-  const handleLbSort = (val) => {
-    setLbSort(val)
-    fetchLeaderboard(lbLen, val)
+  const handleRoomCreated = (room) => {
+    setShowModal(false)
+    const playerCount = room.player_count ?? 0
+    setRoomMsg(`Room created! Challenged ${Math.max(0, playerCount - 1)} player(s).`)
+    setTimeout(() => setRoomMsg(''), 5000)
   }
 
   const mode    = getModeByLength(selected)
   const stats   = myStats  ?? { played: 0, won: 0, win_pct: 0, streak: 0 }
   const entries = lbData?.entries ?? []
 
-  const handleCreateRoom = async () => {
-    setRoomState({ loading: true, message: '', error: '' })
-    try {
-      const room = await apiCreateRoom({
-        name: `${user?.username ?? 'Player'} ${selected}-Letter Room`,
-        wordLength: selected,
-        timeLimit: ROOM_TIME_FOR_LEN[selected],
-        maxPlayers: DEFAULT_MAX_PLAYERS,
-      })
-      setRoomState({
-        loading: false,
-        message: `Room ${room.id} created · ${room.word_length} letters · ${Math.round(room.time_limit / 60)} min`,
-        error: '',
-      })
-    } catch (err) {
-      setRoomState({
-        loading: false,
-        message: '',
-        error: err.message === 'Admin access only.'
-          ? 'Only the admin user can create rooms right now.'
-          : err.message ?? 'Could not create room.',
-      })
-    }
-  }
-
   return (
     <div className="lobby">
+      {/* invite notifications */}
+      {onJoinRoom && <InvitePoller user={user} onJoinRoom={onJoinRoom} />}
+
+      {/* create room modal */}
+      {showModal && (
+        <CreateRoomModal
+          wordLength={selected}
+          user={user}
+          onClose={() => setShowModal(false)}
+          onCreated={handleRoomCreated}
+        />
+      )}
 
       {/* top bar */}
       <header className="lobby-bar">
@@ -209,7 +433,6 @@ export default function Lobby({ user, onStartGame, onLogout }) {
               <span className="lb-live">● LIVE</span>
             </div>
 
-            {/* Controls: filter tabs + sort — same row */}
             <div className="lb-controls">
               <div className="lb-tabs">
                 {LB_LENGTH_TABS.map(tab => (
@@ -234,7 +457,6 @@ export default function Lobby({ user, onStartGame, onLogout }) {
               </select>
             </div>
 
-            {/* Column headers */}
             <div className="lb-col-header">
               <span className="lbh-rank">#</span>
               <span className="lbh-name">Player</span>
@@ -274,19 +496,14 @@ export default function Lobby({ user, onStartGame, onLogout }) {
             <>
               <button
                 className="lobby-room-btn"
-                onClick={handleCreateRoom}
-                disabled={roomState.loading}
+                onClick={() => setShowModal(true)}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
                   <path d="M6.25 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM3.25 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122ZM19.75 7.5a.75.75 0 0 0-1.5 0v2.25H16a.75.75 0 0 0 0 1.5h2.25v2.25a.75.75 0 0 0 1.5 0v-2.25H22a.75.75 0 0 0 0-1.5h-2.25V7.5Z"/>
                 </svg>
-                {roomState.loading ? 'Creating Room…' : 'Create Room · Multiplayer'}
+                Create Room · Multiplayer
               </button>
-              {(roomState.message || roomState.error) && (
-                <div className={`lobby-room-note${roomState.error ? ' error' : ''}`}>
-                  {roomState.error || roomState.message}
-                </div>
-              )}
+              {roomMsg && <div className="lobby-room-note">{roomMsg}</div>}
             </>
           )}
 
