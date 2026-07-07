@@ -31,7 +31,7 @@ def get_current_user(
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Extend get_current_user — additionally requires ROOT_USER."""
-    if current_user.username != settings.ROOT_USER:
+    """Extend get_current_user — requires ROOT_USER or is_admin flag."""
+    if not (current_user.username == settings.ROOT_USER or current_user.is_admin):
         raise HTTPException(status_code=403, detail="Admin access only.")
     return current_user

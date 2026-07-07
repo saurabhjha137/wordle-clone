@@ -107,6 +107,7 @@ class TokenResponse(BaseModel):
     access_token : str
     token_type   : str = "bearer"
     username     : str
+    is_admin     : bool = False
 
 
 class ResetTokenResponse(BaseModel):
@@ -116,6 +117,19 @@ class ResetTokenResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class SetAdminRequest(BaseModel):
+    username : str
+    is_admin : str = "N"
+
+    @field_validator("is_admin")
+    @classmethod
+    def validate_flag(cls, v: str) -> str:
+        v = v.strip().upper()
+        if v not in {"Y", "N"}:
+            raise ValueError("is_admin must be Y or N")
+        return v
 
 
 # ── Game ──────────────────────────────────────────────────────────────────

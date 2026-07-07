@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./wordleee.db"
     JWT_SECRET: str                          # required — no default; app refuses to start without it
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_HOURS: int = 24
+    ACCESS_TOKEN_EXPIRE_HOURS: int = 720  # 30 days
     RESET_TOKEN_EXPIRE_MINUTES: int = 15
     ROOT_USER: str = "admin"
 

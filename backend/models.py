@@ -37,6 +37,7 @@ class User(Base):
     secret_a1     : Mapped[str]        = mapped_column(String, nullable=False)
     secret_q2     : Mapped[str]        = mapped_column(String, nullable=False)
     secret_a2     : Mapped[str]        = mapped_column(String, nullable=False)
+    is_admin      : Mapped[bool]       = mapped_column(Boolean, default=False, nullable=False, server_default='0')
     created_at    : Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=_now)
     updated_at    : Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 

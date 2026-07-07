@@ -7,6 +7,8 @@ from models import User
 from schemas import LeaderboardResponse, UserStatsResponse
 from leaderboard import service
 
+# User/get_current_user still used by /me and /{username} endpoints
+
 router = APIRouter(prefix="/api/leaderboard", tags=["leaderboard"])
 
 VALID_SORT = {"wins", "win_pct", "best_time", "played", "streak"}
@@ -15,14 +17,13 @@ VALID_SORT = {"wins", "win_pct", "best_time", "played", "streak"}
 @router.get(
     "",
     response_model=LeaderboardResponse,
-    summary="Leaderboard with optional word-length filter and sort",
+    summary="Leaderboard with optional word-length filter and sort (public)",
 )
 def get_leaderboard(
     limit      : int          = Query(default=10, ge=1, le=50),
     word_length: int | None   = Query(default=None, ge=3, le=7),
     sort_by    : str          = Query(default="wins"),
     db         : Session      = Depends(get_db),
-    _          : User         = Depends(get_current_user),
 ):
     if sort_by not in VALID_SORT:
         from fastapi import HTTPException as _HTTPException

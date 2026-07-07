@@ -1,10 +1,15 @@
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const TOKEN_KEY  = 'wordle_elite_token'
+const USER_KEY   = 'wordle_elite_user'
 const CIPHER_KEY = [87, 82, 68, 76]
 
 export function getToken()        { return localStorage.getItem(TOKEN_KEY) }
 export function setToken(t)       { localStorage.setItem(TOKEN_KEY, t) }
 export function clearToken()      { localStorage.removeItem(TOKEN_KEY) }
+
+// Subscribers notified when a 401 clears the session (token expired)
+const _authErrorListeners = []
+export function onAuthError(fn) { _authErrorListeners.push(fn) }
 
 function authHeaders() {
   const t = getToken()
@@ -19,6 +24,12 @@ async function request(path, options = {}) {
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
+    // Token expired or revoked — clear session and notify App to redirect to login
+    if (res.status === 401 && headers?.Authorization) {
+      clearToken()
+      localStorage.removeItem(USER_KEY)
+      _authErrorListeners.forEach(fn => fn())
+    }
     const detail = data.detail
     if (detail && typeof detail === 'object') throw { fields: detail }
     throw new Error(typeof detail === 'string' ? detail : `Request failed (${res.status})`)
@@ -42,7 +53,7 @@ export async function apiRegister({ username, password, email, recoveryAnswer1, 
     }),
   })
   setToken(data.access_token)
-  return { username: data.username }
+  return { username: data.username, is_admin: data.is_admin ?? false }
 }
 
 export async function apiLogin({ username, password }) {
@@ -51,7 +62,7 @@ export async function apiLogin({ username, password }) {
     body: JSON.stringify({ username, password }),
   })
   setToken(data.access_token)
-  return { username: data.username }
+  return { username: data.username, is_admin: data.is_admin ?? false }
 }
 
 export async function apiResetPassword({ username, recoveryAnswer1, recoveryAnswer2, password }) {

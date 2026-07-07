@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
 from dependencies import require_admin
 from models import AuthActivity, User
+from schemas import MessageResponse, SetAdminRequest
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -51,3 +52,26 @@ def show_all_user_data(
         })
 
     return {"total": len(result), "users": result}
+
+
+@router.post(
+    "/set-admin",
+    response_model=MessageResponse,
+    summary="Promote or demote a user's admin status (ROOT only)",
+    description=(
+        "**ROOT user only.** Pass `is_admin: Y` to grant admin rights, `N` to revoke. "
+        "Intended to be called from Swagger UI or a direct API call — not from the frontend."
+    ),
+)
+def set_admin(
+    body: SetAdminRequest,
+    db  : Session = Depends(get_db),
+    _   : User    = Depends(require_admin),
+):
+    user = db.query(User).filter(User.username == body.username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail=f"User '{body.username}' not found.")
+    user.is_admin = (body.is_admin == "Y")
+    db.commit()
+    state = "Y" if user.is_admin else "N"
+    return {"message": f"User '{body.username}' is_admin → {state}."}

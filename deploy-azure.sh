@@ -117,7 +117,7 @@ az functionapp config appsettings set \
   --settings \
     JWT_SECRET="$JWT_SECRET" \
     ROOT_USER="$ROOT_USER" \
-    DATABASE_URL="sqlite:////tmp/wordleee.db" \
+    DATABASE_URL="sqlite:////home/data/wordleee.db" \
     CORS_ORIGIN="$FRONTEND_URL" \
     AzureWebJobsFeatureFlags="EnableWorkerIndexing" \
     ENABLE_ORYX_BUILD="true" \

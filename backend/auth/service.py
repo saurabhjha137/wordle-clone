@@ -2,6 +2,7 @@ import jwt
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
+from config import settings
 from models import AuthActivity, User
 from schemas import (
     ForgotPasswordRequest,
@@ -43,7 +44,8 @@ def register(body: RegisterRequest, db: Session, request: Request):
     db.refresh(user)
 
     _log(db, action="register", success=True, user_id=user.id, request=request)
-    return {"access_token": make_access_token(user.username), "token_type": "bearer", "username": user.username}
+    is_admin = user.is_admin or (user.username == settings.ROOT_USER)
+    return {"access_token": make_access_token(user.username), "token_type": "bearer", "username": user.username, "is_admin": is_admin}
 
 
 def login(body: LoginRequest, db: Session, request: Request):
@@ -59,7 +61,8 @@ def login(body: LoginRequest, db: Session, request: Request):
         raise HTTPException(status_code=401, detail="Invalid username or password.")
 
     _log(db, action="login", success=True, user_id=user.id, request=request)
-    return {"access_token": make_access_token(user.username), "token_type": "bearer", "username": user.username}
+    is_admin = user.is_admin or (user.username == settings.ROOT_USER)
+    return {"access_token": make_access_token(user.username), "token_type": "bearer", "username": user.username, "is_admin": is_admin}
 
 
 def forgot_password(body: ForgotPasswordRequest, db: Session, request: Request):

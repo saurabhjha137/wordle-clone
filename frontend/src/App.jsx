@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Lobby  from './Lobby'
 import Game   from './Game'
 import CityBg from './CityBg'
-import { apiLogin, apiRegister, apiResetPassword, clearToken, getToken } from './api'
+import { apiLogin, apiRegister, apiResetPassword, clearToken, getToken, onAuthError } from './api'
 import './App.css'
 
 const STORAGE_KEYS = {
@@ -593,6 +593,15 @@ export default function App() {
     setUser(null)
     setScreen('auth')
   }
+
+  // Auto-logout when any API call gets a 401 (expired/revoked token)
+  useEffect(() => {
+    onAuthError(() => {
+      setUser(null)
+      setScreen('auth')
+      setTab(AUTH_TABS.login)
+    })
+  }, [])
   const handleStartGame = (len) => {
     setWordLen(len)
     setScreen('game')
