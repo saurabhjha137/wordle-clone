@@ -104,7 +104,34 @@ export async function apiGetWord(length) {
     .toUpperCase()
 }
 
-export async function apiSubmitGame({ wordLength, guesses, won, timeTaken, roomId = null }) {
+const _validateCache = new Map()
+
+export async function apiValidateWord(word) {
+  const key = word.toUpperCase()
+  if (_validateCache.has(key)) return _validateCache.get(key)
+  const result = await request(`/api/game/validate-word?word=${encodeURIComponent(word)}`, {
+    headers: authHeaders(),
+  })
+  _validateCache.set(key, result)
+  return result
+}
+
+export async function apiGetDaily(wordLength) {
+  const data = await request(`/api/game/daily?word_length=${wordLength}`, {
+    headers: authHeaders(),
+  })
+  const word = atob(data.cipher)
+    .split('')
+    .map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ CIPHER_KEY[i % 4]))
+    .join('')
+    .toUpperCase()
+  return { ...data, word }
+}
+
+export async function apiSubmitGame({
+  wordLength, guesses, won, timeTaken,
+  roomId = null, mode = 'ranked', isDaily = false, dailyDate = null,
+}) {
   return request('/api/game/submit', {
     method : 'POST',
     headers: authHeaders(),
@@ -114,7 +141,22 @@ export async function apiSubmitGame({ wordLength, guesses, won, timeTaken, roomI
       won,
       time_taken  : timeTaken,
       room_id     : roomId,
+      mode,
+      is_daily    : isDaily,
+      daily_date  : dailyDate,
     }),
+  })
+}
+
+export async function apiGetHistory(limit = 20) {
+  return request(`/api/game/history?limit=${limit}`, {
+    headers: authHeaders(),
+  })
+}
+
+export async function apiGetAchievements() {
+  return request('/api/game/achievements', {
+    headers: authHeaders(),
   })
 }
 
@@ -160,20 +202,71 @@ export async function apiJoinRoom(roomId) {
     method : 'POST',
     headers: authHeaders(),
   })
-  // Decipher the word client-side (same XOR key as apiGetWord)
-  const word = atob(data.cipher_word)
-    .split('')
-    .map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ CIPHER_KEY[i % 4]))
-    .join('')
-    .toUpperCase()
+  // cipher_word is null for waiting rooms; decode only when present
+  const word = data.cipher_word
+    ? atob(data.cipher_word)
+        .split('')
+        .map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ CIPHER_KEY[i % 4]))
+        .join('')
+        .toUpperCase()
+    : null
   return {
     word,
+    status    : data.status,
     timeLimit : data.time_limit,
     wordLength: data.word_length,
     createdBy : data.created_by,
     roomName  : data.room_name,
     roomId    : data.room_id,
   }
+}
+
+export async function apiListRooms() {
+  return request('/api/rooms', { headers: authHeaders() })
+}
+
+export async function apiGetRoom(roomId) {
+  const data = await request(`/api/rooms/${roomId}`, { headers: authHeaders() })
+  if (data.cipher_word) {
+    data.word = atob(data.cipher_word)
+      .split('')
+      .map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ CIPHER_KEY[i % 4]))
+      .join('')
+      .toUpperCase()
+  }
+  return data
+}
+
+export async function apiRequestRoomHint(roomId, hintType, knownPositions = {}) {
+  return request(`/api/rooms/${roomId}/hint`, {
+    method : 'POST',
+    headers: authHeaders(),
+    body   : JSON.stringify({
+      hint_type       : hintType,
+      known_positions : knownPositions,
+    }),
+  })
+}
+
+export async function apiStartRoom(roomId) {
+  return request(`/api/rooms/${roomId}/start`, {
+    method : 'POST',
+    headers: authHeaders(),
+  })
+}
+
+export async function apiCancelRoom(roomId) {
+  return request(`/api/rooms/${roomId}/cancel`, {
+    method : 'POST',
+    headers: authHeaders(),
+  })
+}
+
+export async function apiDeleteRoom(roomId) {
+  return request(`/api/rooms/${roomId}`, {
+    method : 'DELETE',
+    headers: authHeaders(),
+  })
 }
 
 /* ── Admin endpoints ────────────────────────────────────── */

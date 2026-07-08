@@ -2,11 +2,11 @@
 import jwt
 from fastapi import Depends, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.orm import Session
+from azure.cosmos.exceptions import CosmosResourceNotFoundError
 
-from auth.utils import decode_token
+from auth.utils import decode_access_token
 from config import settings
-from database import get_db
+from database import get_container
 from models import User
 
 _bearer = HTTPBearer()
@@ -14,20 +14,26 @@ _bearer = HTTPBearer()
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Security(_bearer),
-    db: Session = Depends(get_db),
 ) -> User:
-    """Validate Bearer JWT and return the authenticated User row."""
+    """Validate Bearer JWT, check token_version, and return the authenticated User."""
     try:
-        username = decode_token(credentials.credentials, expected_type="access")
+        username, token_version = decode_access_token(credentials.credentials)
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired.")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token.")
 
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
+    try:
+        doc = get_container("users").read_item(item=username, partition_key=username)
+    except CosmosResourceNotFoundError:
         raise HTTPException(status_code=401, detail="User not found.")
-    return user
+    except Exception:
+        raise HTTPException(status_code=401, detail="User not found.")
+
+    if doc.get("token_version", 0) != token_version:
+        raise HTTPException(status_code=401, detail="Token has been invalidated. Please log in again.")
+
+    return User.from_doc(doc)
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:

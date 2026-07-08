@@ -20,9 +20,9 @@ def _make_token(payload: dict, expires_delta: timedelta) -> str:
     return jwt.encode(data, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
-def make_access_token(username: str) -> str:
+def make_access_token(username: str, token_version: int = 0) -> str:
     return _make_token(
-        {"sub": username, "type": "access"},
+        {"sub": username, "type": "access", "tv": token_version},
         timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS),
     )
 
@@ -40,3 +40,11 @@ def decode_token(token: str, expected_type: str) -> str:
     if payload.get("type") != expected_type:
         raise jwt.InvalidTokenError("Wrong token type.")
     return payload["sub"]
+
+
+def decode_access_token(token: str) -> tuple[str, int]:
+    """Decode an access token, return (username, token_version)."""
+    payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    if payload.get("type") != "access":
+        raise jwt.InvalidTokenError("Wrong token type.")
+    return payload["sub"], payload.get("tv", 0)

@@ -9,7 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-_USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{3,20}$')
+
+_USERNAME_RE = re.compile(r'^[a-zA-Z0-9_-]{3,20}$')
 _PASSWORD_RE = re.compile(r'^(?=.*[a-zA-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{8,}$')
 
 VALID_TIME_LIMITS = {60, 90, 120, 180, 300}
@@ -32,7 +33,7 @@ class RegisterRequest(BaseModel):
     def validate_username(cls, v: str) -> str:
         v = v.strip()
         if not _USERNAME_RE.match(v):
-            raise ValueError("Username must be 3–20 chars: letters, numbers, underscores only.")
+            raise ValueError("Username must be 3–20 characters: letters, numbers, _ or - only.")
         return v
 
     @field_validator("password")
@@ -132,6 +133,41 @@ class SetAdminRequest(BaseModel):
         return v
 
 
+class AdminResetUserRequest(BaseModel):
+    username     : str
+    new_username : str | None = None
+    new_password : str | None = None
+    new_email    : str | None = None
+    new_secret_a1: str | None = None
+    new_secret_a2: str | None = None
+
+    @field_validator("username", "new_username", mode="before")
+    @classmethod
+    def validate_usernames(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not _USERNAME_RE.match(v):
+            raise ValueError("Username must be 3–20 characters: letters, numbers, _ or - only.")
+        return v
+
+    @field_validator("new_password", mode="before")
+    @classmethod
+    def validate_new_password(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not _PASSWORD_RE.match(v):
+            raise ValueError("Password must be 8+ chars with at least one letter, one number, and one special character.")
+        return v
+
+    @field_validator("new_secret_a1", "new_secret_a2", mode="before")
+    @classmethod
+    def lowercase_answers(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return v.strip().lower()
+
+
 # ── Game ──────────────────────────────────────────────────────────────────
 
 class WordResponse(BaseModel):
@@ -144,6 +180,9 @@ class SubmitGameRequest(BaseModel):
     guesses     : int  = Field(..., ge=0, le=8)
     won         : bool
     time_taken  : int  = Field(..., ge=0, description="Seconds elapsed")
+    mode        : Literal["ranked", "practice"] = "ranked"
+    is_daily    : bool = False
+    daily_date  : str | None = None
     room_id     : str | None = None
 
     @field_validator("word_length")
@@ -154,11 +193,50 @@ class SubmitGameRequest(BaseModel):
         return v
 
 
+class AchievementInfo(BaseModel):
+    code        : str
+    name        : str
+    description : str
+
+
 class SubmitGameResponse(BaseModel):
-    ok     : bool
-    played : int
-    won    : int
-    streak : int
+    ok               : bool
+    played           : int
+    won              : int
+    streak           : int
+    ranked           : bool = True
+    new_achievements : list[AchievementInfo] = []
+
+
+class GameHistoryEntry(BaseModel):
+    id          : str
+    played_at   : str
+    word_length : int
+    won         : bool
+    guesses     : int
+    time_taken  : int
+    mode        : str
+    is_daily    : bool
+    room_id     : str | None = None
+
+
+class GameHistoryResponse(BaseModel):
+    entries: list[GameHistoryEntry]
+
+
+class AchievementEntry(AchievementInfo):
+    unlocked_at: str
+
+
+class AchievementsResponse(BaseModel):
+    entries: list[AchievementEntry]
+
+
+class DailyChallengeResponse(BaseModel):
+    date          : str
+    word_length   : int
+    cipher        : str
+    already_played: bool
 
 
 # ── Room ──────────────────────────────────────────────────────────────────
@@ -201,8 +279,14 @@ class CreateRoomRequest(BaseModel):
 
 
 class ParticipantInfo(BaseModel):
-    username  : str
-    status    : str
+    username    : str
+    status      : str
+    guesses     : int | None = None
+    won         : bool | None = None
+    time_taken  : int | None = None
+    score       : int | None = None
+    hints_used  : int = 0
+    hint_penalty: int = 0
 
 
 class RoomResponse(BaseModel):
@@ -228,14 +312,49 @@ class RoomResultRequest(BaseModel):
     time_taken : int  = Field(..., ge=0)
 
 
+class RoomHintRequest(BaseModel):
+    hint_type       : str
+    known_positions : dict[int, str] = Field(default_factory=dict)
+
+    @field_validator("hint_type")
+    @classmethod
+    def valid_hint_type(cls, v: str) -> str:
+        valid = {"vowel_count", "remove_wrong_letters", "reveal_letter", "first_letter"}
+        if v not in valid:
+            raise ValueError(f"hint_type must be one of {sorted(valid)}.")
+        return v
+
+    @field_validator("known_positions")
+    @classmethod
+    def valid_known_positions(cls, v: dict[int, str]) -> dict[int, str]:
+        cleaned: dict[int, str] = {}
+        for pos, letter in v.items():
+            if pos < 0 or pos > 6:
+                raise ValueError("known_positions keys must be zero-based positions from 0 to 6.")
+            if not isinstance(letter, str) or len(letter.strip()) != 1 or not letter.strip().isalpha():
+                raise ValueError("known_positions values must be single letters.")
+            cleaned[pos] = letter.strip().upper()
+        return cleaned
+
+
+class RoomHintResponse(BaseModel):
+    hint_type    : str
+    message      : str
+    data         : dict
+    penalty      : int
+    hints_used   : int
+    hint_penalty : int
+
+
 class JoinRoomResponse(BaseModel):
     message     : str
-    cipher_word : str
+    cipher_word : str | None     # null for waiting rooms; revealed only when active
     time_limit  : int
     word_length : int
     created_by  : str
     room_name   : str
     room_id     : str
+    status      : str            # "waiting" | "active"
 
 
 class InviteItem(BaseModel):

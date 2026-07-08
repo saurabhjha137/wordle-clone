@@ -12,7 +12,9 @@ Frontend decipher (copy this into the React app):
         ).join('');
 """
 import base64
+import hashlib
 import random
+from datetime import date as _date
 
 _KEY = [87, 82, 68, 76]  # 'WRDL'
 
@@ -211,7 +213,29 @@ def get_random_word(length: int) -> str:
     return random.choice(pool).upper()
 
 
+def is_valid_word(word: str) -> bool:
+    """Return True if the word exists in the pool for its length."""
+    return word.lower() in WORD_POOLS.get(len(word), [])
+
+
+def get_daily_word(length: int, for_date: _date | None = None) -> str:
+    """Return the same word for every user on a given date (deterministic hash)."""
+    pool = WORD_POOLS.get(length)
+    if not pool:
+        raise ValueError(f"No word pool for length {length}.")
+    if for_date is None:
+        for_date = _date.today()
+    seed = int(hashlib.sha256(f"{for_date.isoformat()}_{length}".encode()).hexdigest(), 16)
+    return pool[seed % len(pool)].upper()
+
+
 def cipher_word(word: str) -> str:
     """XOR-encode a word and return as base64. Never call with plaintext in a response."""
     xored = bytes(ord(c) ^ _KEY[i % len(_KEY)] for i, c in enumerate(word))
     return base64.b64encode(xored).decode("ascii")
+
+
+def decipher_word(cipher: str) -> str:
+    """Decode a word produced by cipher_word()."""
+    raw = base64.b64decode(cipher.encode("ascii"))
+    return "".join(chr(b ^ _KEY[i % len(_KEY)]) for i, b in enumerate(raw)).upper()

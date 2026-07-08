@@ -104,7 +104,6 @@ function validateRegistrationForm(form) {
 function validatePasswordResetForm(form) {
   return {
     username: validate.username(form.username),
-    email: validate.email(form.email),
     recoveryAnswer1: validate.recoveryAnswer(form.recoveryAnswer1),
     recoveryAnswer2: validate.recoveryAnswer(form.recoveryAnswer2),
     password: validate.password(form.password),
@@ -372,7 +371,6 @@ function RegisterForm({ onSuccess, onSwitchToLogin }) {
 function ResetPasswordForm({ onSwitchToLogin }) {
   const [form, setForm] = useState({
     username: '',
-    email: '',
     recoveryAnswer1: '',
     recoveryAnswer2: '',
     password: '',
@@ -433,16 +431,6 @@ function ResetPasswordForm({ onSwitchToLogin }) {
           value={form.username} onChange={e => set('username', e.target.value)}
         />
         <span className="auth-err">{errors.username}</span>
-      </div>
-
-      <div className="auth-field">
-        <label className="auth-label">Email</label>
-        <input
-          className={`auth-input${errors.email ? ' err' : form.email ? ' ok' : ''}`}
-          type="email" autoComplete="email" placeholder="you@example.com"
-          value={form.email} onChange={e => set('email', e.target.value)}
-        />
-        <span className="auth-err">{errors.email}</span>
       </div>
 
       <div className="auth-field">
@@ -584,8 +572,11 @@ export default function App() {
   const [tab, setTab] = useState(AUTH_TABS.login)
   const [user, setUser] = useState(getSavedUser)
   const [screen, setScreen] = useState(() => isLoggedIn() ? 'lobby' : 'auth')
-  const [wordLen, setWordLen] = useState(DEFAULT_WORD_LENGTH)
-  const [roomGame, setRoomGame] = useState(null) // { word, timeLimit, wordLength, createdBy, roomName, roomId }
+  const [wordLen,   setWordLen]   = useState(DEFAULT_WORD_LENGTH)
+  const [roomGame,  setRoomGame]  = useState(null) // { word, timeLimit, wordLength, createdBy, roomName, roomId }
+  const [gameMode,  setGameMode]  = useState('ranked')
+  const [isDaily,   setIsDaily]   = useState(false)
+  const [dailyDate, setDailyDate] = useState(null)
 
   const handleLogin = (u) => {
     setUser(u)
@@ -597,12 +588,19 @@ export default function App() {
     setRoomGame(null)
     setScreen('auth')
   }
-  const handleStartGame = (len) => {
+  const handleStartGame = ({ wordLength, mode = 'ranked', isDaily: daily = false }) => {
     setRoomGame(null)
-    setWordLen(len)
+    setWordLen(wordLength)
+    setGameMode(mode)
+    setIsDaily(daily)
+    setDailyDate(daily ? new Date().toISOString().slice(0, 10) : null)
     setScreen('game')
   }
   const handleJoinRoom = (roomData) => {
+    if (!roomData.word) {
+      // Waiting room — stay in lobby; user sees status in the Rooms panel
+      return
+    }
     setRoomGame(roomData)
     setWordLen(roomData.wordLength)
     setScreen('game')
@@ -632,6 +630,10 @@ export default function App() {
         onStartGame={handleStartGame}
         onJoinRoom={handleJoinRoom}
         onLogout={handleLogout}
+        theme={theme}
+        onThemeCycle={() => setTheme(t => THEMES[(THEMES.indexOf(t) + 1) % THEMES.length])}
+        background={background}
+        onBgChange={setBackground}
       />
     )
   }
@@ -643,6 +645,9 @@ export default function App() {
         wordLen={wordLen}
         onBack={() => { setScreen('lobby'); setRoomGame(null) }}
         roomGame={roomGame}
+        gameMode={gameMode}
+        isDaily={isDaily}
+        dailyDate={dailyDate}
       />
     )
   }

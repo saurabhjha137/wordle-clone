@@ -1,97 +1,82 @@
 """Leaderboard domain — business logic only."""
 from __future__ import annotations
 
-from sqlalchemy import case, func
-from sqlalchemy.orm import Session
+from azure.cosmos.exceptions import CosmosResourceNotFoundError
 
-from models import User, UserStats, UserStatsByLength
+from database import get_container
 
 
-def _fmt(stats_row) -> dict:
-    """Shared dict builder for both stats table types."""
-    played = stats_row.played or 0
-    won    = stats_row.won    or 0
+def _fmt(stats: dict) -> dict:
+    played  = stats.get("played") or 0
+    won     = stats.get("won") or 0
     win_pct = round((won / played) * 100) if played else 0
     return {
-        "played"    : played,
-        "won"       : won,
-        "win_pct"   : win_pct,
-        "streak"    : stats_row.streak    or 0,
-        "max_streak": stats_row.max_streak or 0,
-        "best_time" : getattr(stats_row, "best_time", None),
+        "played":     played,
+        "won":        won,
+        "win_pct":    win_pct,
+        "streak":     stats.get("streak") or 0,
+        "max_streak": stats.get("max_streak") or 0,
+        "best_time":  stats.get("best_time"),
     }
 
 
-def _sort_expr(model, sort_by: str):
-    """Return an ORDER BY expression for the given sort key."""
-    if sort_by == "win_pct":
-        return (
-            case(
-                (model.played > 0, model.won * 100 / model.played),
-                else_=0,
-            ).desc()
-        )
-    if sort_by == "best_time":
-        if not hasattr(model, "best_time"):
-            return model.won.desc()  # best_time only exists on per-length table
-        return func.coalesce(model.best_time, 999999).asc()
-    if sort_by == "played":
-        return model.played.desc()
-    if sort_by == "streak":
-        return model.max_streak.desc()
-    # default: wins
-    return model.won.desc()
+def _sort_key(sort_by: str):
+    def key(r: dict):
+        played = r.get("played") or 0
+        won    = r.get("won") or 0
+        if sort_by == "win_pct":
+            return -(won * 100 // played) if played else 0
+        if sort_by == "best_time":
+            return r.get("best_time") or 999_999
+        if sort_by == "played":
+            return -played
+        if sort_by == "streak":
+            return -(r.get("max_streak") or 0)
+        return -won  # default: wins
+    return key
 
 
 def get_leaderboard(
-    db         : Session,
-    limit      : int  = 10,
+    limit      : int       = 10,
     word_length: int | None = None,
-    sort_by    : str  = "wins",
+    sort_by    : str       = "wins",
 ) -> list[dict]:
     if word_length is not None:
-        order = _sort_expr(UserStatsByLength, sort_by)
-        rows = (
-            db.query(User, UserStatsByLength)
-            .join(UserStatsByLength, User.id == UserStatsByLength.user_id)
-            .filter(UserStatsByLength.word_length == word_length)
-            .order_by(order)
-            .limit(limit)
-            .all()
-        )
+        rows = list(get_container("user_stats_by_length").query_items(
+            query="SELECT * FROM c WHERE c.word_length = @wl",
+            parameters=[{"name": "@wl", "value": word_length}],
+            enable_cross_partition_query=True,
+        ))
     else:
-        order = _sort_expr(UserStats, sort_by)
-        rows = (
-            db.query(User, UserStats)
-            .join(UserStats, User.id == UserStats.user_id)
-            .order_by(order)
-            .limit(limit)
-            .all()
-        )
+        rows = list(get_container("user_stats").query_items(
+            query="SELECT * FROM c",
+            enable_cross_partition_query=True,
+        ))
 
-    result = []
-    for rank, (user, stats) in enumerate(rows, start=1):
-        result.append({"rank": rank, "username": user.username, **_fmt(stats)})
-    return result
+    rows.sort(key=_sort_key(sort_by))
+    return [
+        {"rank": rank, "username": r.get("username", ""), **_fmt(r)}
+        for rank, r in enumerate(rows[:limit], start=1)
+    ]
 
 
-def get_user_stats(db: Session, username: str, word_length: int | None = None) -> dict | None:
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        return None
+def get_user_stats(username: str, word_length: int | None = None) -> dict | None:
+    empty = {"username": username, "played": 0, "won": 0, "win_pct": 0,
+             "streak": 0, "max_streak": 0, "best_time": None}
 
     if word_length is not None:
-        stats = db.query(UserStatsByLength).filter(
-            UserStatsByLength.user_id == user.id,
-            UserStatsByLength.word_length == word_length,
-        ).first()
-        if not stats:
-            return {"username": username, "played": 0, "won": 0, "win_pct": 0,
-                    "streak": 0, "max_streak": 0, "best_time": None}
-        return {"username": username, **_fmt(stats)}
-
-    stats = db.query(UserStats).filter(UserStats.user_id == user.id).first()
-    if not stats:
-        return {"username": username, "played": 0, "won": 0, "win_pct": 0,
-                "streak": 0, "max_streak": 0, "best_time": None}
-    return {"username": username, **_fmt(stats)}
+        try:
+            stats = get_container("user_stats_by_length").read_item(
+                item=f"{username}_{word_length}", partition_key=username
+            )
+            return {"username": username, **_fmt(stats)}
+        except CosmosResourceNotFoundError:
+            return empty
+    else:
+        try:
+            stats = get_container("user_stats").read_item(
+                item=username, partition_key=username
+            )
+            return {"username": username, **_fmt(stats)}
+        except CosmosResourceNotFoundError:
+            return empty

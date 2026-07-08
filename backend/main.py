@@ -1,33 +1,71 @@
-"""Wordleee FastAPI application entry point.
-
-Startup sequence
-----------------
-1. Create all SQLAlchemy tables (SQLite for dev, swap DATABASE_URL for prod).
-2. Mount CORS — only allows the Vite dev origins; the admin endpoint is
-   intentionally left out of cross-origin access.
-3. Register all domain routers with their prefixes.
-"""
+"""Wordleee FastAPI application entry point."""
 import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from limiter import limiter
 
-from database import Base, engine
+from database import ensure_containers
 from admin.router       import router as admin_router
 from auth.router        import router as auth_router
 from game.router        import router as game_router
 from leaderboard.router import router as leaderboard_router
 from room.router        import router as room_router
+from config import settings
 
-Base.metadata.create_all(bind=engine)
+ensure_containers()
+
+
+def _seed_admin():
+    """Ensure the root admin account exists on every cold start."""
+    from database import get_container
+    from auth.utils import hash_password
+    from azure.cosmos.exceptions import CosmosResourceNotFoundError
+    from datetime import datetime, timezone
+
+    admin_pw = os.getenv("ADMIN_PASSWORD", "Admin@2025!")
+    username = settings.ROOT_USER
+    users = get_container("users")
+    now = datetime.now(timezone.utc).isoformat()
+
+    try:
+        doc = users.read_item(item=username, partition_key=username)
+        if not doc.get("is_admin"):
+            doc["is_admin"] = True
+            doc["updated_at"] = now
+            users.upsert_item(doc)
+    except CosmosResourceNotFoundError:
+        users.create_item({
+            "id":           username,
+            "username":     username,
+            "password_hash": hash_password(admin_pw),
+            "email":        None,
+            "secret_q1":    "Recovery phrase 1",
+            "secret_a1":    hash_password("adminrecovery1"),
+            "secret_q2":    "Recovery phrase 2",
+            "secret_a2":    hash_password("adminrecovery2"),
+            "is_admin":     True,
+            "created_at":   now,
+            "updated_at":   now,
+        })
+    except Exception as exc:
+        import sys
+        print(f"[main] Warning: admin seed failed: {exc}", file=sys.stderr)
+
+
+_seed_admin()
 
 app = FastAPI(
     title       = "Wordleee API",
     description = "Backend for Wordleee Elite — auth, game, rooms, leaderboard.",
     version     = "1.0.0",
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 _CORS_ORIGINS = [
     "http://localhost:5173",
@@ -35,8 +73,6 @@ _CORS_ORIGINS = [
     "http://localhost:4173",
     "http://127.0.0.1:4173",
 ]
-# CORS_ORIGIN env var lets the deploy script inject the production frontend URL
-# e.g. https://wordleclonesaurabhjha137.z13.web.core.windows.net
 if _extra := os.getenv("CORS_ORIGIN"):
     _CORS_ORIGINS.append(_extra.rstrip("/"))
 
@@ -44,8 +80,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins     = _CORS_ORIGINS,
     allow_credentials = True,
-    allow_methods     = ["*"],
-    allow_headers     = ["*"],
+    allow_methods     = ["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers     = ["Authorization", "Content-Type", "Accept"],
 )
 
 
@@ -55,7 +91,6 @@ async def pydantic_validation_handler(request: Request, exc: ValidationError):
     return JSONResponse(status_code=422, content={"errors": errors})
 
 
-# Register routers
 app.include_router(auth_router)
 app.include_router(game_router)
 app.include_router(room_router)
