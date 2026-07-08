@@ -178,7 +178,9 @@ export async function apiGetMyStats() {
 
 /* ── Room endpoints ─────────────────────────────────────── */
 
-export async function apiCreateRoom({ name, wordLength, timeLimit, maxPlayers, word, invitedUsernames }) {
+export async function apiCreateRoom({
+  name, wordLength, timeLimit, maxPlayers, word, creatorHint, invitedUsernames,
+}) {
   return request('/api/rooms', {
     method : 'POST',
     headers: authHeaders(),
@@ -188,6 +190,7 @@ export async function apiCreateRoom({ name, wordLength, timeLimit, maxPlayers, w
       time_limit         : timeLimit,
       max_players        : maxPlayers,
       word,
+      creator_hint       : creatorHint || null,
       invited_usernames  : invitedUsernames,
     }),
   })

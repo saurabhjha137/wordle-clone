@@ -10,6 +10,7 @@ const ATTEMPTS_FOR_LEN = { 3: 4,  4: 5,   5: 6,   6: 7,   7: 8   }
 const MAX_ROOM_HINTS   = 3
 
 const ROOM_HINTS = [
+  { type: 'creator_hint',         label: 'Creator' },
   { type: 'vowel_count',          label: 'Vowels' },
   { type: 'remove_wrong_letters', label: 'Remove' },
   { type: 'reveal_letter',        label: 'Reveal' },

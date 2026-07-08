@@ -22,6 +22,7 @@ HINT_PENALTIES = {
     "remove_wrong_letters": 100,
     "reveal_letter": 150,
     "first_letter": 200,
+    "creator_hint": 100,
 }
 VOWELS = set("AEIOU")
 
@@ -106,6 +107,7 @@ def create_room(
     time_limit        : int,
     max_players       : int,
     word              : str,
+    creator_hint      : str | None,
     invited_usernames : list[str],
 ) -> dict:
     rooms_c = get_container("rooms")
@@ -122,6 +124,7 @@ def create_room(
         "word_length": word_length,
         "time_limit":  time_limit,
         "cipher_word": cipher_word(word),
+        "creator_hint": creator_hint,
         "max_players": max(max_players, len(invited_usernames) or 2),
         "status":      "waiting",
         "created_at":  now,
@@ -311,6 +314,12 @@ def request_hint(
     elif hint_type == "first_letter":
         data = {"position": 0, "letter": word[0]}
         message = f"First letter is {word[0]}."
+    elif hint_type == "creator_hint":
+        hint = room.get("creator_hint")
+        data = {"hint": hint} if hint else {}
+        message = hint or "Room creator did not add a hint."
+        if not hint:
+            penalty = 0
     else:
         known = {int(pos) for pos in known_positions.keys()}
         blocked = known | _revealed_positions(participant)

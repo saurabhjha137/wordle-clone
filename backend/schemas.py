@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 _USERNAME_RE = re.compile(r'^[a-zA-Z0-9_-]{3,20}$')
 _PASSWORD_RE = re.compile(r'^(?=.*[a-zA-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{8,}$')
 
-VALID_TIME_LIMITS = {60, 90, 120, 180, 300}
+VALID_TIME_LIMITS = {60, 90, 120, 150, 180, 210, 300}
 VALID_WORD_LENGTHS = {3, 4, 5, 6, 7}
 
 
@@ -247,6 +247,7 @@ class CreateRoomRequest(BaseModel):
     time_limit        : int
     max_players       : int       = Field(default=10, ge=2, le=20)
     word              : str       = Field(..., description="Plaintext word set by admin")
+    creator_hint      : str | None = Field(default=None, max_length=180)
     invited_usernames : list[str] = Field(default_factory=list, description="Usernames to invite")
 
     @field_validator("word_length")
@@ -270,6 +271,14 @@ class CreateRoomRequest(BaseModel):
         if not v.isalpha():
             raise ValueError("Word must contain only letters A–Z.")
         return v
+
+    @field_validator("creator_hint")
+    @classmethod
+    def normalize_creator_hint(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = " ".join(v.strip().split())
+        return v or None
 
     @model_validator(mode="after")
     def word_matches_length(self) -> "CreateRoomRequest":
@@ -319,7 +328,7 @@ class RoomHintRequest(BaseModel):
     @field_validator("hint_type")
     @classmethod
     def valid_hint_type(cls, v: str) -> str:
-        valid = {"vowel_count", "remove_wrong_letters", "reveal_letter", "first_letter"}
+        valid = {"vowel_count", "remove_wrong_letters", "reveal_letter", "first_letter", "creator_hint"}
         if v not in valid:
             raise ValueError(f"hint_type must be one of {sorted(valid)}.")
         return v

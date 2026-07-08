@@ -994,6 +994,33 @@
   font-weight: 600;
 }
 
+.modal-hint-input {
+  width: 100%;
+  min-height: 62px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--border, rgba(255,255,255,.12));
+  border-radius: 8px;
+  background: rgba(255,255,255,.04);
+  color: var(--text, #f0f0f0);
+  font-family: inherit;
+  font-size: .84rem;
+  line-height: 1.4;
+  outline: none;
+}
+.modal-hint-input:focus {
+  border-color: var(--accent, #6ee7b7);
+  background: rgba(110,231,183,.04);
+}
+.modal-hint-input::placeholder { color: var(--muted, #888); }
+
+.modal-hint-count {
+  margin: -6px 0 0;
+  color: var(--text-3, #888);
+  font-size: .66rem;
+  text-align: right;
+}
+
 .player-list {
   display: flex;
   flex-direction: column;

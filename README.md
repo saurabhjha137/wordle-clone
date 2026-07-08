@@ -28,7 +28,8 @@ A full-stack multiplayer Wordle clone built on Azure. Features room-based challe
 | Countdown timer | LED clock per mode — runs out = game over |
 | Auth | Register / Login / Forgot password (two bcrypt-hashed recovery phrases) |
 | Leaderboard | Filter by word length · Sort by wins / win% / best time / played / streak |
-| Multiplayer rooms | Admin creates with a secret word → players get invite toast → join → start → all play same word → auto-finish |
+| Multiplayer rooms | Admin creates with a secret word + optional creator hint → players get invite toast → join → start → all play same word → auto-finish |
+| Room hints & scoring | Players can spend points on hints during room games; final room ranking uses score, hints, guesses, and time |
 | Achievements | Unlocked on game submit (speed, streaks, first win, etc.) |
 | Themes | Dark / light / auto + animated background (city parallax, hyperspace, warp) |
 | Security | Rate limiting · token version invalidation · admin audit log |
@@ -88,6 +89,7 @@ A full-stack multiplayer Wordle clone built on Azure. Features room-based challe
 ```
   Admin opens Create Room modal
     → picks word length, types secret word (validated against dictionary)
+    → optionally enters a creator-written sentence hint
     → selects players from user list
     → POST /api/rooms  (server ciphers word, creates participant docs)
 
@@ -100,9 +102,10 @@ A full-stack multiplayer Wordle clone built on Azure. Features room-based challe
   Each player: Lobby shows "Play" button
     → GET /api/rooms/{id} returns cipher_word (only when active + joined)
     → Game mounts with room's word and time_limit
+    → player may request hints; each charged hint reduces final score
 
   On submit: POST /api/game/submit  (with room_id)
-    → server updates participant: status=won|lost, won=bool, guesses, time_taken
+    → server updates participant: status=won|lost, won=bool, guesses, time_taken, hints, score
     → when all joined players have submitted → room status=finished
 
   Room status machine:
@@ -112,6 +115,56 @@ A full-stack multiplayer Wordle clone built on Azure. Features room-based challe
 ```
 
 Waiting rooms older than 30 minutes are silently hidden from lists without deleting from the database.
+
+### Room Hints
+
+Hints are only available inside active multiplayer room games. They are requested through the backend so the server can track penalties and prevent client-side score tampering.
+
+| Hint | Cost | Result |
+|---|---:|---|
+| Creator | 100 pts | Reveals the optional sentence written by the room creator |
+| Vowels | 80 pts | Shows how many vowels are in the word |
+| Remove | 100 pts | Removes up to 3 letters that are not in the answer |
+| Reveal | 150 pts | Reveals one unrevealed correct position |
+| First | 200 pts | Reveals the first letter |
+
+Rules:
+
+- Maximum 3 charged hints per player per room.
+- Hints are blocked before room start and after the player submits.
+- If no creator hint exists, revealing it costs 0 points.
+- Plaintext room words are never returned by the hint endpoint.
+
+### Room Scoring
+
+Room score is calculated server-side when a participant submits:
+
+```
+score = 500 win base
+      + time bonus (2 × seconds remaining)
+      + guess bonus
+      - wrong guess penalty
+      - hint penalty
+```
+
+Guess bonus:
+
+| Guesses | Bonus |
+|---:|---:|
+| 1 | 500 |
+| 2 | 350 |
+| 3 | 250 |
+| 4 | 150 |
+| 5+ | 50 |
+
+Wrong guesses cost 50 points each. Losses and timeouts score 0. Final score never goes below 0.
+
+Finished rooms rank players by:
+
+1. Higher score
+2. Fewer hints used
+3. Fewer guesses
+4. Faster time
 
 ---
 
@@ -147,8 +200,8 @@ wordleee/
     │   ├── service.py          Word selection, daily logic, submit_game, achievements
     │   └── words.py            Word lists by length + cipher_word() + is_valid_word()
     ├── room/
-    │   ├── router.py           Full CRUD + join/start/cancel/result/delete
-    │   └── service.py          Room lifecycle, 30-min expiry filter, delete + audit log
+    │   ├── router.py           Full CRUD + join/start/cancel/hint/result/delete
+    │   └── service.py          Room lifecycle, hints, scoring, 30-min expiry, delete + audit log
     ├── leaderboard/
     │   ├── router.py           GET / (filtered) + /me + /{username}
     │   └── service.py          Aggregation over game_results
@@ -277,15 +330,41 @@ The script: builds the frontend → uploads to Azure Blob Storage `$web` → set
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/` | Admin | Create room (server ciphers word, creates participant docs) |
+| POST | `/` | Admin | Create room (server ciphers word, stores optional `creator_hint`, creates participant docs) |
 | GET | `/` | Bearer | Rooms created by or involving the current user (30-min expiry filter) |
 | GET | `/invites` | Bearer | Pending invites within 30 minutes |
 | GET | `/{id}` | Bearer | Room detail + participants; `cipher_word` only when active + joined |
 | POST | `/{id}/join` | Bearer | Accept invite (invited → joined) |
 | POST | `/{id}/start` | Bearer | Creator only — waiting → active |
+| POST | `/{id}/hint` | Bearer | Request room hint; updates `hints_used` and `hint_penalty` |
 | POST | `/{id}/cancel` | Bearer | Creator only — any status → cancelled |
 | DELETE | `/{id}` | Bearer | Creator only — hard-delete room + all participant docs |
-| POST | `/{id}/result` | Bearer | Submit room game result directly |
+| POST | `/{id}/result` | Bearer | Submit room game result directly; server calculates score |
+
+Create room body:
+
+```json
+{
+  "name": "admin's 5-Letter Room",
+  "word_length": 5,
+  "time_limit": 150,
+  "max_players": 10,
+  "word": "BRAVE",
+  "creator_hint": "Think of courage.",
+  "invited_usernames": ["cool_player"]
+}
+```
+
+Hint request body:
+
+```json
+{
+  "hint_type": "creator_hint",
+  "known_positions": {}
+}
+```
+
+Supported `hint_type` values: `creator_hint`, `vowel_count`, `remove_wrong_letters`, `reveal_letter`, `first_letter`.
 
 ### Leaderboard — `/api/leaderboard`
 
@@ -335,8 +414,11 @@ The script: builds the frontend → uploads to Azure Blob Storage `$web` → set
 
 - **Username as Cosmos partition key** — `id` and partition key both equal `username` for O(1) user lookups.
 - **Room participants co-located** — `room_id` is the partition key for `room_participants`, so all participant queries are single-partition.
+- **Room scoring is server-side** — the frontend can request hints and submit game outcome, but final score is calculated in `room/service.py`.
+- **Creator hint is hidden until requested** — the sentence is stored on the room and only revealed through `/api/rooms/{id}/hint`, costing 100 points when present.
 - **Word cipher is obfuscation, not encryption** — the key is visible in client JS. Security relies on the server for word selection, not secrecy of the cipher.
 - **30-min waiting room expiry** — filtered at query time, not via a background job. Rooms remain in DB until hard-deleted.
 - **`MODES` as single source of truth** — word-length timing defined once in `Lobby.jsx`; `ROOM_TIME_FOR_LEN` and `Game.jsx` both derive from it.
+- **Room timer validation matches UI** — backend accepts the room timers used by the frontend: 60, 90, 120, 150, 180, 210, and 300 seconds.
 - **Validate-word cache** — module-level `Map` in `api.js`; words are immutable so it never needs invalidation.
 - **Late import in `game/service.py`** — `from room.service import update_room_participant_from_game` is inside the function body to avoid a circular import.

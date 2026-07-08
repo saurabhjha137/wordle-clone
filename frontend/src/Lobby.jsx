@@ -74,6 +74,7 @@ function CreateRoomModal({ wordLength, user, onClose, onCreated }) {
   const [users,        setUsers]        = useState([])
   const [search,       setSearch]       = useState('')
   const [selected,     setSelected]     = useState(new Set())
+  const [creatorHint,  setCreatorHint]  = useState('')
   const [loading,      setLoading]      = useState(false)
   const [usersLoad,    setUsersLoad]    = useState(true)
   const [error,        setError]        = useState('')
@@ -153,11 +154,13 @@ function CreateRoomModal({ wordLength, user, onClose, onCreated }) {
         timeLimit        : ROOM_TIME_FOR_LEN[len],
         maxPlayers       : Math.max(DEFAULT_MAX_PLAYERS, selected.size + 1),
         word,
+        creatorHint,
         invitedUsernames : [...selected],
       })
       onCreated(room)
     } catch (err) {
-      setError(err.message ?? 'Failed to create room.')
+      const fieldErrors = err.fields ? Object.values(err.fields).join(' ') : ''
+      setError(fieldErrors || err.message || 'Failed to create room.')
       setLoading(false)
     }
   }
@@ -219,6 +222,22 @@ function CreateRoomModal({ wordLength, user, onClose, onCreated }) {
           {wordReady && !wordChecking && wordValid === false && (
             <p className="modal-hint invalid">✗ "{word}" is not in the dictionary — enter a different word</p>
           )}
+        </div>
+
+        {/* Creator hint */}
+        <div className="modal-section">
+          <p className="modal-label">
+            Creator hint <span className="modal-label-dim">(optional, costs player 100 pts)</span>
+          </p>
+          <textarea
+            className="modal-hint-input"
+            value={creatorHint}
+            onChange={e => setCreatorHint(e.target.value.slice(0, 180))}
+            placeholder="Example: Think of something you see at night."
+            rows={2}
+            maxLength={180}
+          />
+          <p className="modal-hint-count">{creatorHint.length}/180</p>
         </div>
 
         {/* Player selection + search */}

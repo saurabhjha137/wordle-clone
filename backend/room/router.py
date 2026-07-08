@@ -49,6 +49,7 @@ def create_room(body: CreateRoomRequest, admin: User = Depends(require_admin)):
         time_limit        = body.time_limit,
         max_players       = body.max_players,
         word              = body.word,
+        creator_hint      = body.creator_hint,
         invited_usernames = body.invited_usernames,
     )
     participants = room.pop("participants", [])
