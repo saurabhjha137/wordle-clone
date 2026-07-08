@@ -1,24 +1,20 @@
-# Wordle Elite
+# Wordleee Elite
 
-A full-stack multiplayer Wordle clone with per-mode leaderboards, room-based competitions, and a cyberpunk city background.
+A full-stack multiplayer Wordle clone built on Azure. Features room-based challenges, per-mode leaderboards, daily puzzles, achievements, and a cyberpunk city background.
 
-**Stack:** React 18 + Vite · FastAPI · SQLAlchemy · SQLite · bcrypt · PyJWT
+**Live:** https://wordleee.z13.web.core.windows.net
 
 ---
 
-## Table of Contents
+## Stack
 
-1. [Features](#features)
-2. [Architecture](#architecture)
-3. [Auth Flow](#auth-flow)
-4. [Game Flow](#game-flow)
-5. [Room (Multiplayer) Flow](#room-multiplayer-flow)
-6. [Leaderboard Flow](#leaderboard-flow)
-7. [Project Structure](#project-structure)
-8. [Quick Start](#quick-start)
-9. [Environment Variables](#environment-variables)
-10. [API Reference](#api-reference)
-11. [Security Notes](#security-notes)
+| Layer | Technology |
+|---|---|
+| Frontend | React 18 + Vite — hosted on Azure Blob Storage (static website) |
+| Backend | FastAPI + Python 3.12 — Azure Functions v2 (AsgiFunctionApp, Linux Consumption) |
+| Database | Azure Cosmos DB NoSQL — free tier, serverless, `wordleee-db` |
+| Auth | JWT HS256 · bcrypt passwords & recovery answers |
+| Cipher | XOR + base64 (key `WRDL`) — words never sent as plaintext |
 
 ---
 
@@ -26,171 +22,96 @@ A full-stack multiplayer Wordle clone with per-mode leaderboards, room-based com
 
 | Feature | Detail |
 |---|---|
-| Word lengths | 3 · 4 · 5 · 6 · 7 letters |
-| Attempts | 4 – 8 (scales with word length) |
-| Countdown timer | Per-mode time limit with LED clock |
-| Auth | Register / Login / Forgot password (security questions) |
+| Word lengths | 3 · 4 · 5 · 6 · 7 letters with distinct attempt limits and time limits |
+| Modes | Ranked (affects leaderboard) · Practice |
+| Daily challenge | Same word for all users each UTC day; one submission per day |
+| Countdown timer | LED clock per mode — runs out = game over |
+| Auth | Register / Login / Forgot password (two bcrypt-hashed recovery phrases) |
 | Leaderboard | Filter by word length · Sort by wins / win% / best time / played / streak |
-| Multiplayer rooms | Admin creates → players join → all submit → auto-finish |
-| Themes | 15 colour themes + animated city / hyperspace / warp backgrounds |
+| Multiplayer rooms | Admin creates with a secret word → players get invite toast → join → start → all play same word → auto-finish |
+| Achievements | Unlocked on game submit (speed, streaks, first win, etc.) |
+| Themes | Dark / light / auto + animated background (city parallax, hyperspace, warp) |
+| Security | Rate limiting · token version invalidation · admin audit log |
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    Browser (React)                    │
-│                                                      │
-│  App.jsx  ──►  Auth screen (register / login / reset)│
-│           ──►  Lobby (mode select · stats · leaderboard · create room) │
-│           ──►  Game (word grid · timer · result panel)│
-│                                                      │
-│  api.js sends JWT Bearer token on every request      │
-└──────────────────┬───────────────────────────────────┘
-                   │  HTTP/JSON  (VITE_API_URL)
-                   ▼
-┌──────────────────────────────────────────────────────┐
-│                  FastAPI  (Python)                   │
-│                                                      │
-│  /api/auth/*        Auth router                      │
-│  /api/game/*        Game router                      │
-│  /api/rooms/*       Room router                      │
-│  /api/leaderboard/* Leaderboard router               │
-│  /api/admin/*       Admin router (ROOT_USER only)    │
-│                                                      │
-│  dependencies.py  ──  JWT decode ──  get_current_user│
-│  models.py        ──  SQLAlchemy ORM                 │
-│  config.py        ──  pydantic-settings (.env)       │
-└──────────────────┬───────────────────────────────────┘
-                   │  SQLAlchemy
-                   ▼
-         ┌─────────────────┐
-         │   SQLite DB      │
-         │  (wordleee.db)   │
-         │                 │
-         │  users           │
-         │  auth_activity   │
-         │  user_stats      │
-         │  user_stats_by_length │
-         │  game_results    │
-         │  rooms           │
-         │  room_participants│
-         └─────────────────┘
+  Browser (React SPA)
+  ┌───────────────────────────────────────────────────────┐
+  │  App.jsx  →  Login | Lobby | Game                     │
+  │  api.js  (fetch wrapper · JWT headers · word cache)   │
+  └──────────────────┬────────────────────────────────────┘
+                     │  HTTPS  (JWT Bearer)
+  ┌──────────────────▼────────────────────────────────────┐
+  │  Azure Functions — wordleee-api.azurewebsites.net      │
+  │  FastAPI wrapped in AsgiFunctionApp                   │
+  │  ┌──────────┬──────────┬──────────┬─────────────┐     │
+  │  │/api/auth │/api/game │/api/rooms│/api/leaderbd│     │
+  └──┴──────────┴──────────┴──────────┴─────────────┴─────┘
+                     │  Cosmos DB SDK
+  ┌──────────────────▼────────────────────────────────────┐
+  │  Azure Cosmos DB — wordleee-db                         │
+  │  users · game_results · rooms · room_participants      │
+  │  auth_activity · audit_log · daily_submissions         │
+  │  user_achievements                                     │
+  └────────────────────────────────────────────────────────┘
+  Frontend static files served from Azure Blob Storage ($web)
 ```
 
 ---
 
 ## Auth Flow
 
-```mermaid
-sequenceDiagram
-    participant U as Browser
-    participant A as FastAPI /api/auth
-    participant DB as SQLite
-
-    Note over U,DB: Registration
-    U->>A: POST /register {username, password, secret_q1/a1, secret_q2/a2}
-    A->>A: Validate username pattern (3-20 chars alphanum_)
-    A->>A: Validate password strength (8+ chars, letter+digit+special)
-    A->>DB: SELECT user WHERE username = ?
-    DB-->>A: null (not taken)
-    A->>A: bcrypt hash password
-    A->>A: bcrypt hash secret_a1, secret_a2
-    A->>DB: INSERT user row
-    A->>DB: INSERT auth_activity (register, success)
-    A-->>U: {access_token (JWT 24h), username}
-
-    Note over U,DB: Login
-    U->>A: POST /login {username, password}
-    A->>DB: SELECT user WHERE username = ?
-    A->>A: bcrypt verify password
-    A->>DB: INSERT auth_activity (login, success|fail)
-    A-->>U: {access_token, username}  OR  401
-
-    Note over U,DB: Forgot Password
-    U->>A: POST /forgot-password {username, secret_a1, secret_a2}
-    A->>DB: SELECT user
-    A->>A: bcrypt verify both answers
-    A-->>U: {reset_token (JWT 15 min)}  OR  400 (same error either way)
-    U->>A: POST /reset-password {reset_token, new_password}
-    A->>A: Decode + verify reset token type
-    A->>DB: UPDATE password_hash
-    A-->>U: {message: "Password updated"}
-```
+1. **Register** — POST `/api/auth/register`. Server validates username pattern (`^[a-zA-Z0-9_-]{3,20}$`) and password complexity (8+ chars, letter + digit + special). bcrypt-hashes password and both recovery answers. Returns JWT with `token_version=0` embedded.
+2. **Login** — POST `/api/auth/login`. Returns JWT with current `token_version` from the user document.
+3. **Every request** — `Authorization: Bearer <token>`. `get_current_user()` decodes JWT, reads Cosmos user doc, compares `token_version` — mismatch returns 401 immediately.
+4. **Forgot password** — POST `/api/auth/forgot-password`. Verifies both recovery answers (bcrypt). Returns a 15-min reset token.
+5. **Reset password** — POST `/api/auth/reset-password`. Sets new bcrypt hash **and increments `token_version`** — all previously issued JWTs are invalidated.
 
 ---
 
 ## Game Flow
 
-```mermaid
-flowchart TD
-    A([User opens Lobby]) --> B[Selects word length 3-7]
-    B --> C[Clicks Play]
-    C --> D[GET /api/game/word?length=N\nserver returns XOR-ciphered word]
-    D --> E[Client deciphers word in browser\nplaintext never on wire]
-    E --> F{Game loop}
-    F --> G[User types guess]
-    G --> H{Valid word length?}
-    H -- No --> G
-    H -- Yes --> I[Evaluate guess\nCorrect / Present / Absent]
-    I --> J{Won or no attempts left or timer = 0}
-    J -- Continue --> F
-    J -- Done --> K[POST /api/game/submit\n{word_length, guesses, won, time_taken}]
-    K --> L[Server updates UserStats + UserStatsByLength\nbest_time tracked per word length]
-    L --> M[Show result panel]
-    M --> N([Back to Lobby])
-```
+1. Lobby: pick word length (3–7) + mode (ranked/practice/daily).
+2. `GET /api/game/word?length=N` returns an XOR+base64 ciphered word. Client deciphers it — plaintext never on the wire.
+3. Player types guesses. Each `ENTER` calls `GET /api/game/validate-word?word=W` (results cached in a module-level `Map` — no duplicate requests per session).
+4. Evaluation (correct / present / absent) runs client-side.
+5. Game ends on win, no attempts left, or timer expiry.
+6. `POST /api/game/submit` records the result, updates stats, awards achievements, and — if `room_id` is present — bridges to update the room participant.
 
 ---
 
 ## Room (Multiplayer) Flow
 
-```mermaid
-sequenceDiagram
-    participant Admin as Admin User
-    participant P as Player(s)
-    participant API as FastAPI /api/rooms
-    participant DB as SQLite
+```
+  Admin opens Create Room modal
+    → picks word length, types secret word (validated against dictionary)
+    → selects players from user list
+    → POST /api/rooms  (server ciphers word, creates participant docs)
 
-    Admin->>API: POST /api/rooms {name, word_length, time_limit, max_players}
-    API->>API: require_admin check
-    API->>API: pick random word, XOR-cipher it
-    API->>DB: INSERT room (status=waiting)
-    API-->>Admin: {room_id, ...}
+  Players: InvitePoller polls /api/rooms/invites every 10s
+    → toast notification appears
+    → POST /api/rooms/{id}/join  (status: invited → joined)
 
-    P->>API: POST /api/rooms/{id}/join
-    API->>DB: INSERT room_participant (status=joined)
+  Admin: POST /api/rooms/{id}/start  (status: waiting → active)
 
-    Admin->>API: POST /api/rooms/{id}/start
-    API->>DB: UPDATE room SET status=active
+  Each player: Lobby shows "Play" button
+    → GET /api/rooms/{id} returns cipher_word (only when active + joined)
+    → Game mounts with room's word and time_limit
 
-    Note over P,DB: All players get ciphered word from GET /api/rooms/{id}
-    P->>API: GET /api/rooms/{id}
-    API-->>P: {cipher_word, time_limit, participants}
+  On submit: POST /api/game/submit  (with room_id)
+    → server updates participant: status=won|lost, won=bool, guesses, time_taken
+    → when all joined players have submitted → room status=finished
 
-    Note over P,DB: Each player plays independently, then submits
-    P->>API: POST /api/rooms/{id}/submit {guesses, won, time_taken}
-    API->>DB: INSERT game_result
-    API->>DB: UPDATE user_stats + user_stats_by_length
-    API->>DB: UPDATE participant status (won|lost)
-    API->>API: If all participants done → room status=finished
-    API-->>P: updated room state
+  Room status machine:
+    waiting → (start) → active → (all submit) → finished
+    waiting/active → (cancel) → cancelled
+    any status → (creator DELETE) → hard-deleted from Cosmos
 ```
 
----
-
-## Leaderboard Flow
-
-```mermaid
-flowchart LR
-    A["GET /api/leaderboard<br/>word_length=5 and sort_by=best_time"] --> B{"word_length param?"}
-    B -- Yes --> C["Query user_stats_by_length<br/>WHERE word_length = N"]
-    B -- No --> D["Query user_stats<br/>global all-lengths"]
-    C --> E["ORDER BY sort_by<br/>wins / win_pct / best_time / played / streak"]
-    D --> E
-    E --> F["Return ranked list<br/>rank, username, played, won, win_pct,<br/>streak, max_streak, best_time"]
-```
+Waiting rooms older than 30 minutes are silently hidden from lists without deleting from the database.
 
 ---
 
@@ -198,73 +119,70 @@ flowchart LR
 
 ```
 wordleee/
-├── frontend/                  React + Vite SPA
-│   ├── src/
-│   │   ├── App.jsx            Root: auth ↔ lobby ↔ game state machine
-│   │   ├── Lobby.jsx          Mode select, leaderboard, create room
-│   │   ├── Game.jsx           Word grid, keyboard, timer, result panel
-│   │   ├── CityBg.jsx         Animated canvas background (3 variants)
-│   │   ├── api.js             All fetch calls, JWT storage
-│   │   ├── index.css          Design tokens (CSS variables, 15 themes)
-│   │   └── assets/            Background images + SVGs
-│   ├── .env.example
-│   └── package.json
+├── deploy-azure.sh             One-command build + deploy to Azure
+├── frontend/
+│   └── src/
+│       ├── App.jsx             Root — auth state, theme, bg, routing
+│       ├── Login.jsx           Register + login + password reset
+│       ├── Lobby.jsx           Hub — mode select, stats, leaderboard, rooms panel
+│       ├── Game.jsx            Board, keyboard, timer, result overlay
+│       ├── CityBg.jsx          Animated canvas background
+│       └── api.js              Fetch wrapper, auth headers, word cipher, validate cache
 │
-└── backend/                   FastAPI + SQLAlchemy
-    ├── main.py                App factory, CORS, router includes
-    ├── config.py              pydantic-settings — reads .env
-    ├── database.py            SQLAlchemy engine + session
-    ├── models.py              ORM models (all 7 tables)
-    ├── schemas.py             Pydantic request/response schemas
-    ├── dependencies.py        get_current_user, require_admin
+└── backend/
+    ├── main.py                 FastAPI app, CORS, SlowAPI limiter, router includes
+    ├── limiter.py              Shared SlowAPI Limiter instance (X-Forwarded-For aware)
+    ├── config.py               pydantic-settings — reads environment variables
+    ├── models.py               User dataclass (includes token_version)
+    ├── schemas.py              Pydantic request/response schemas + validators
+    ├── database.py             Cosmos DB container factory (lazy singleton)
+    ├── dependencies.py         get_current_user (token_version check), require_admin
+    ├── function_app.py         Azure Functions entry point (AsgiFunctionApp)
     ├── auth/
-    │   ├── router.py          POST /register /login /forgot-password /reset-password
-    │   ├── service.py         Business logic (hash answers, log activity)
-    │   └── utils.py           bcrypt helpers, JWT encode/decode
+    │   ├── router.py           Rate-limited: /register /login /forgot-password /reset-password
+    │   ├── service.py          Business logic — bcrypt, token_version increment on reset
+    │   └── utils.py            make_access_token(token_version), decode_access_token, bcrypt helpers
     ├── game/
-    │   ├── router.py          GET /word  POST /submit
-    │   ├── service.py         submit_game, stat helpers, streak logic
-    │   └── words.py           Word lists + XOR cipher
+    │   ├── router.py           /word /validate-word /daily /submit /history /achievements
+    │   ├── service.py          Word selection, daily logic, submit_game, achievements
+    │   └── words.py            Word lists by length + cipher_word() + is_valid_word()
     ├── room/
-    │   ├── router.py          CRUD + join/start/submit
-    │   └── service.py         Room lifecycle, per-length stats
+    │   ├── router.py           Full CRUD + join/start/cancel/result/delete
+    │   └── service.py          Room lifecycle, 30-min expiry filter, delete + audit log
     ├── leaderboard/
-    │   ├── router.py          GET / (filtered) + GET /me + GET /{username}
-    │   └── service.py         get_leaderboard, get_user_stats
+    │   ├── router.py           GET / (filtered) + /me + /{username}
+    │   └── service.py          Aggregation over game_results
     ├── admin/
-    │   └── router.py          GET /show-all-user-data (admin only)
-    ├── .env.example           ← copy to .env and fill in
-    ├── requirements.txt
-    └── .gitignore
+    │   └── router.py           /users /set-admin /reset-user + audit logging
+    ├── utils/
+    │   └── audit.py            log_admin_action() → audit_log Cosmos container
+    └── requirements.txt
 ```
 
 ---
 
-## Quick Start
+## Local Development
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12
 - Node.js 18+
+- Azure Cosmos DB account (or the [Cosmos DB emulator](https://learn.microsoft.com/azure/cosmos-db/local-emulator))
 
 ### 1 — Backend
 
 ```bash
 cd wordleee/backend
 
-# Create virtual environment
 python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
 
-# Install dependencies
 pip install -r requirements.txt
 
-# Configure environment
-cp .env.example .env
-# Edit .env — set JWT_SECRET to a random 32+ char string:
-# python3 -c "import secrets; print(secrets.token_hex(32))"
+# Copy and fill in local.settings.json (gitignored — never commit this)
+# Required keys: COSMOS_CONNECTION_STRING, JWT_SECRET (32+ chars), ADMIN_PASSWORD
+cp local.settings.json.example local.settings.json
 
-# Run dev server
 uvicorn main:app --reload --port 8000
 ```
 
@@ -277,34 +195,55 @@ cd wordleee/frontend
 
 npm install
 
-# (Optional) set API URL if backend is not on localhost:8000
-# echo "VITE_API_URL=http://localhost:8000" > .env
+# API URL defaults to http://localhost:8000 — override if needed:
+# echo "VITE_API_URL=http://localhost:8000" > .env.local
 
 npm run dev
 ```
 
 App: http://localhost:5173
 
-### 3 — Create admin account
+### 3 — Admin account
 
-Register normally with username `admin` (matches `ROOT_USER` in `.env`). That account automatically gets admin privileges for creating rooms.
+On first cold start, `main.py` seeds a root admin user from `ROOT_USER` (default: `admin`) and `ADMIN_PASSWORD` environment variables. Log in with those credentials to access room creation and admin endpoints.
+
+---
+
+## Deploy to Azure
+
+```bash
+bash deploy-azure.sh
+```
+
+The script: builds the frontend → uploads to Azure Blob Storage `$web` → sets Function App env vars → deploys backend via `func azure functionapp publish`.
+
+**Resources used:**
+
+| Resource | Name |
+|---|---|
+| Resource group | `wordle-rg` |
+| Storage account | `wordleee` |
+| Function App | `wordleee-api` |
+| Cosmos DB | `wordleee-db` (free tier) |
 
 ---
 
 ## Environment Variables
 
-### Backend (`backend/.env`)
+### Backend (Azure App Settings / `local.settings.json`)
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `JWT_SECRET` | **Yes** | — | Random 32+ byte string. App refuses to start if missing or too short. |
-| `DATABASE_URL` | No | `sqlite:///./wordleee.db` | SQLAlchemy connection string |
+| `COSMOS_CONNECTION_STRING` | **Yes** | — | Azure Cosmos DB connection string |
+| `JWT_SECRET` | **Yes** | — | Min 32 bytes. App refuses to start if missing or too short. |
+| `ADMIN_PASSWORD` | **Yes** | — | Password for the seeded root admin account |
+| `ROOT_USER` | No | `admin` | Username that always has admin rights (server-side constant) |
 | `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
-| `ACCESS_TOKEN_EXPIRE_HOURS` | No | `24` | Access token lifetime |
+| `ACCESS_TOKEN_EXPIRE_HOURS` | No | `720` | Access token lifetime (30 days) |
 | `RESET_TOKEN_EXPIRE_MINUTES` | No | `15` | Password-reset token lifetime |
-| `ROOT_USER` | No | `admin` | Username that gets admin access |
+| `CORS_ORIGIN` | No | — | Extra allowed origin appended to the built-in list |
 
-### Frontend (`frontend/.env`)
+### Frontend (`frontend/.env.production`)
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
@@ -314,63 +253,90 @@ Register normally with username `admin` (matches `ROOT_USER` in `.env`). That ac
 
 ## API Reference
 
-### Auth
+### Auth — `/api/auth`
+
+| Method | Path | Rate limit | Description |
+|---|---|---|---|
+| POST | `/register` | 5/min/IP | Create account, returns JWT |
+| POST | `/login` | 10/min/IP | Login, returns JWT |
+| POST | `/forgot-password` | 5/min/IP | Verify recovery answers, returns 15-min reset token |
+| POST | `/reset-password` | — | Set new password; invalidates all existing tokens |
+
+### Game — `/api/game`
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/word?length=N` | XOR+b64 ciphered random word (N = 3–7) |
+| GET | `/validate-word?word=W` | `{valid: bool}` — client caches in a module-level Map |
+| GET | `/daily?word_length=N` | Same ciphered word for all users on the current UTC date |
+| POST | `/submit` | Record result; awards achievements; bridges to room participant update |
+| GET | `/history?limit=N` | Last N game results for current user |
+| GET | `/achievements` | Unlocked achievements for current user |
+
+### Rooms — `/api/rooms`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/api/auth/register` | — | Create account, returns JWT |
-| POST | `/api/auth/login` | — | Login, returns JWT |
-| POST | `/api/auth/forgot-password` | — | Verify security answers, returns reset token |
-| POST | `/api/auth/reset-password` | — | Set new password using reset token |
+| POST | `/` | Admin | Create room (server ciphers word, creates participant docs) |
+| GET | `/` | Bearer | Rooms created by or involving the current user (30-min expiry filter) |
+| GET | `/invites` | Bearer | Pending invites within 30 minutes |
+| GET | `/{id}` | Bearer | Room detail + participants; `cipher_word` only when active + joined |
+| POST | `/{id}/join` | Bearer | Accept invite (invited → joined) |
+| POST | `/{id}/start` | Bearer | Creator only — waiting → active |
+| POST | `/{id}/cancel` | Bearer | Creator only — any status → cancelled |
+| DELETE | `/{id}` | Bearer | Creator only — hard-delete room + all participant docs |
+| POST | `/{id}/result` | Bearer | Submit room game result directly |
 
-### Game
+### Leaderboard — `/api/leaderboard`
 
-| Method | Path | Auth | Description |
+| Method | Path | Query params | Description |
 |---|---|---|---|
-| GET | `/api/game/word?length=N` | Bearer | Get XOR-ciphered word (N = 3–7) |
-| POST | `/api/game/submit` | Bearer | Submit result, updates stats |
+| GET | `/` | `limit`, `word_length`, `sort_by` | Ranked list — sort by `wins`, `win_pct`, `best_time`, `played`, `streak` |
+| GET | `/me` | — | Current user's aggregated stats |
+| GET | `/{username}` | — | Any player's stats |
 
-### Rooms
+### Admin — `/api/admin`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/api/rooms` | Admin | Create room |
-| GET | `/api/rooms` | Bearer | List open rooms |
-| GET | `/api/rooms/{id}` | Bearer | Room detail + cipher word (if active participant) |
-| POST | `/api/rooms/{id}/join` | Bearer | Join a room |
-| POST | `/api/rooms/{id}/start` | Admin | Start the room |
-| POST | `/api/rooms/{id}/submit` | Bearer | Submit room result |
+| Method | Path | Description |
+|---|---|---|
+| GET | `/users` | All registered usernames (used by Create Room player picker) |
+| POST | `/set-admin` | Grant or revoke `is_admin` flag; audit-logged |
+| POST | `/reset-user` | Force-set password / email / recovery answers; audit-logged |
+| GET | `/show-all-user-data` | All users with their auth activity |
 
-### Leaderboard
+### Health
 
-| Method | Path | Auth | Query params | Description |
-|---|---|---|---|---|
-| GET | `/api/leaderboard` | Bearer | `limit`, `word_length`, `sort_by` | Ranked leaderboard |
-| GET | `/api/leaderboard/me` | Bearer | `word_length` | Your stats |
-| GET | `/api/leaderboard/{username}` | Bearer | `word_length` | Any player's stats |
-
-**`sort_by` values:** `wins` · `win_pct` · `best_time` · `played` · `streak`
-
-### Admin
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/api/admin/show-all-user-data` | Admin | All users + auth activity |
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/health` | `{status: "ok", version}` — used by deploy smoke tests |
 
 ---
 
-## Security Notes
+## Security
 
-| Area | Status | Note |
-|---|---|---|
-| Passwords | Hashed (bcrypt) | |
-| Security answers | Hashed (bcrypt) | Answers are hashed before storage; verification uses `bcrypt.verify` |
-| JWT secret | Required, 32+ bytes | App startup fails if `.env` is missing or secret is too short |
-| Credentials file | Git-ignored | `local.settings.json`, `.env`, `*.db` are all in `.gitignore` |
-| SQL injection | Not present | All queries go through SQLAlchemy ORM |
-| Admin answers exposed | Fixed | Admin endpoint returns questions only, never answer hashes |
-| Legacy Azure Function | Removed | `function_app.py` had wildcard CORS and anonymous auth — deleted |
-| CORS | Dev-only origins | `localhost:5173` only; update `main.py` for production domain |
-| JWT storage | `localStorage` | Acceptable for a learning project; prefer HttpOnly cookies in production |
-| Game result forgery | Known limitation | `won`/`time_taken` are client-supplied; server-side session verification is a future improvement |
-| Rate limiting | Not implemented | Add `slowapi` for production to throttle login and forgot-password |
+| Control | Implementation |
+|---|---|
+| Passwords | bcrypt (one-way) — never stored or returned as plaintext |
+| Recovery answers | bcrypt-hashed before storage; verified with `bcrypt.checkpw` |
+| JWT secret | Min 32 bytes enforced at startup by pydantic validator |
+| Token version invalidation | `token_version` int in user doc + JWT payload; password reset increments it, instantly invalidating all live tokens |
+| Rate limiting | `slowapi` — login 10/min, register + forgot-password 5/min per IP (X-Forwarded-For aware) |
+| CORS | Explicit allow-list: `GET POST DELETE OPTIONS` + `Authorization Content-Type Accept` headers only |
+| Username validation | `^[a-zA-Z0-9_-]{3,20}$` — enforced at schema level |
+| Password complexity | 8+ chars, at least one letter + one digit + one special character |
+| Word cipher | XOR + base64 (key `WRDL`) — plaintext word never sent over the wire |
+| Admin audit log | `audit_log` Cosmos container — records `set_admin`, `reset_user`, `delete_room` actions with actor, target, timestamp |
+| Credentials | `local.settings.json` and `.env` are gitignored — never committed |
+| Admin gating | `ROOT_USER` hardcoded server-side in `config.py`; also grantable via `is_admin` DB flag |
+
+---
+
+## Key Design Decisions
+
+- **Username as Cosmos partition key** — `id` and partition key both equal `username` for O(1) user lookups.
+- **Room participants co-located** — `room_id` is the partition key for `room_participants`, so all participant queries are single-partition.
+- **Word cipher is obfuscation, not encryption** — the key is visible in client JS. Security relies on the server for word selection, not secrecy of the cipher.
+- **30-min waiting room expiry** — filtered at query time, not via a background job. Rooms remain in DB until hard-deleted.
+- **`MODES` as single source of truth** — word-length timing defined once in `Lobby.jsx`; `ROOM_TIME_FOR_LEN` and `Game.jsx` both derive from it.
+- **Validate-word cache** — module-level `Map` in `api.js`; words are immutable so it never needs invalidation.
+- **Late import in `game/service.py`** — `from room.service import update_room_participant_from_game` is inside the function body to avoid a circular import.
